@@ -19,7 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "SkillNova — Proof over paperwork.",
       description: "AI talent intelligence built on real evidence, not just resumes.",
       type: "website",
-      images: [{ url: `${origin}/og.png`, width: 1731, height: 909, alt: "SkillNova AI Talent Intelligence" }],
+      images: [{ url: `${origin}/og.png`, width: 1732, height: 908, alt: "SkillNova AI Talent Intelligence" }],
     },
     twitter: { card: "summary_large_image", title: "SkillNova — Proof over paperwork.", description: "AI talent intelligence built on real evidence.", images: [`${origin}/og.png`] },
   };
