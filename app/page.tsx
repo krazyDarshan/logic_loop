@@ -1,1432 +1,290 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type Role = "recruiter" | "candidate";
-type Candidate = {
-  id: number;
-  name: string;
-  initials: string;
-  role: string;
-  location: string;
-  match: number;
-  talent: number;
-  authenticity: number;
-  color: string;
-  skills: string[];
-  proof: string;
-  activity: string;
-  experience: string;
+type View = "profile" | "match" | "verify" | "hackathon" | "recruiter";
+type IconName =
+  | "spark"
+  | "profile"
+  | "match"
+  | "verify"
+  | "trophy"
+  | "people"
+  | "github"
+  | "file"
+  | "arrow"
+  | "check"
+  | "search"
+  | "briefcase"
+  | "menu"
+  | "close"
+  | "bolt"
+  | "shield"
+  | "code"
+  | "clock";
+
+const icons: Record<IconName, React.ReactNode> = {
+  spark: <><path d="M12 2l1.7 5.3L19 9l-5.3 1.7L12 16l-1.7-5.3L5 9l5.3-1.7L12 2Z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"/></>,
+  profile: <><circle cx="12" cy="8" r="3.25"/><path d="M5.5 20c.65-4 2.8-6 6.5-6s5.85 2 6.5 6"/></>,
+  match: <><circle cx="9.5" cy="9.5" r="5.5"/><path d="m14 14 5 5M7.5 9.5l1.3 1.3 2.8-3"/></>,
+  verify: <><path d="M12 2.8 19 6v5.1c0 4.5-2.9 8-7 10.1-4.1-2.1-7-5.6-7-10.1V6l7-3.2Z"/><path d="m8.7 12 2.1 2.1 4.7-5"/></>,
+  trophy: <><path d="M8 4h8v4.5c0 3-1.7 5-4 5s-4-2-4-5V4Z"/><path d="M8 6H4.5v1c0 2.4 1.5 4 4 4M16 6h3.5v1c0 2.4-1.5 4-4 4M12 14v4M8.5 20h7"/></>,
+  people: <><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.5-3.4 2.3-5.1 5.5-5.1s5 1.7 5.5 5.1"/><circle cx="17.3" cy="9" r="2.2"/><path d="M15.5 14.5c3.1-.5 4.8 1 5 4.5"/></>,
+  github: <><path d="M12 2.8a9.2 9.2 0 0 0-2.9 17.9v-2.4c-2.3.5-2.9-1-2.9-1-.4-1-.9-1.3-.9-1.3-.8-.5 0-.5 0-.5.8.1 1.3.9 1.3.9.7 1.3 2 1 2.5.8.1-.6.3-1 .6-1.3-1.9-.2-3.8-.9-3.8-4.1 0-.9.3-1.7.9-2.3-.1-.2-.4-1.1.1-2.3 0 0 .7-.2 2.5.9A8.5 8.5 0 0 1 12 7c.8 0 1.5.1 2.2.3 1.8-1.2 2.5-.9 2.5-.9.5 1.2.2 2.1.1 2.3.6.6.9 1.4.9 2.3 0 3.2-1.9 3.9-3.8 4.1.3.3.6.8.6 1.6v4A9.2 9.2 0 0 0 12 2.8Z"/></>,
+  file: <><path d="M6 2.8h8l4 4V21H6V2.8Z"/><path d="M14 2.8v4h4M9 12h6M9 16h6"/></>,
+  arrow: <><path d="M5 12h14M14 7l5 5-5 5"/></>,
+  check: <path d="m5 12 4 4L19 6"/>,
+  search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 4.5 4.5"/></>,
+  briefcase: <><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V4h8v3M3 12h18M10 12v2h4v-2"/></>,
+  menu: <><path d="M4 7h16M4 12h16M4 17h16"/></>,
+  close: <><path d="m6 6 12 12M18 6 6 18"/></>,
+  bolt: <path d="m13 2-8 12h7l-1 8 8-12h-7l1-8Z"/>,
+  shield: <><path d="M12 2.8 19 6v5.1c0 4.5-2.9 8-7 10.1-4.1-2.1-7-5.6-7-10.1V6l7-3.2Z"/><path d="M9 12h6"/></>,
+  code: <><path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/></>,
+  clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></>,
 };
 
-const candidates: Candidate[] = [
-  {
-    id: 1,
-    name: "Aarav Mehta",
-    initials: "AM",
-    role: "GenAI Engineer",
-    location: "New Delhi",
-    match: 96,
-    talent: 92,
-    authenticity: 98,
-    color: "coral",
-    skills: ["Python", "RAG", "Open Source"],
-    proof: "Winner · HackNCR 2026",
-    activity: "347 contributions",
-    experience: "3.2 yrs",
-  },
-  {
-    id: 2,
-    name: "Naina Rao",
-    initials: "NR",
-    role: "ML Product Engineer",
-    location: "Bengaluru",
-    match: 93,
-    talent: 89,
-    authenticity: 97,
-    color: "violet",
-    skills: ["PyTorch", "React", "LLMOps"],
-    proof: "12 merged OSS PRs",
-    activity: "28 repositories",
-    experience: "2.8 yrs",
-  },
-  {
-    id: 3,
-    name: "Kabir Sharma",
-    initials: "KS",
-    role: "Full-stack AI Developer",
-    location: "Gurugram",
-    match: 91,
-    talent: 87,
-    authenticity: 95,
-    color: "blue",
-    skills: ["Next.js", "GenAI", "Node"],
-    proof: "Finalist · Smart India",
-    activity: "84 pull requests",
-    experience: "2.4 yrs",
-  },
-  {
-    id: 4,
-    name: "Ishita Sen",
-    initials: "IS",
-    role: "Data & AI Engineer",
-    location: "Pune",
-    match: 88,
-    talent: 86,
-    authenticity: 99,
-    color: "green",
-    skills: ["MLOps", "Python", "AWS"],
-    proof: "Maintainer · Flowline",
-    activity: "526 contributions",
-    experience: "3.6 yrs",
-  },
+function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
+  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{icons[name]}</svg>;
+}
+
+const navItems: { id: View; label: string; icon: IconName; eyebrow: string }[] = [
+  { id: "profile", label: "Talent Profile", icon: "profile", eyebrow: "Discover" },
+  { id: "match", label: "Job Match", icon: "match", eyebrow: "Match" },
+  { id: "verify", label: "Skill Verify", icon: "verify", eyebrow: "Validate" },
+  { id: "hackathon", label: "Hackathon Hiring", icon: "trophy", eyebrow: "Identify" },
+  { id: "recruiter", label: "Recruiter Hub", icon: "people", eyebrow: "Decide" },
 ];
 
-const recruiterNav = [
-  ["overview", "⌂", "Overview"],
-  ["discover", "⌕", "Talent discovery"],
-  ["pipeline", "◇", "Hiring pipeline"],
-  ["assessments", "◈", "Assessments"],
-  ["hackathons", "⚑", "Hackathons"],
-  ["pitch", "▱", "Pitch analyzer"],
-  ["analytics", "◒", "Hiring analytics"],
+const candidates = [
+  { name: "Ananya Verma", role: "Full-stack AI Engineer", initials: "AV", match: 94, verified: 91, score: 92, location: "Bengaluru", evidence: "12 repos · 3 hackathons", skills: ["Python", "React", "LangGraph"] },
+  { name: "Rohan Mehta", role: "Machine Learning Engineer", initials: "RM", match: 89, verified: 87, score: 88, location: "Delhi", evidence: "18 repos · OSS contributor", skills: ["PyTorch", "FastAPI", "MLOps"] },
+  { name: "Meera Nair", role: "Frontend Engineer", initials: "MN", match: 86, verified: 90, score: 87, location: "Pune", evidence: "9 repos · Hackathon winner", skills: ["React", "TypeScript", "Next.js"] },
+  { name: "Kabir Shah", role: "Backend Engineer", initials: "KS", match: 83, verified: 84, score: 85, location: "Mumbai", evidence: "15 repos · 1 hackathon", skills: ["Python", "Postgres", "Docker"] },
 ];
 
-const candidateNav = [
-  ["overview", "⌂", "My dashboard"],
-  ["profile", "◉", "Talent identity"],
-  ["opportunities", "◇", "Job matches"],
-  ["roadmap", "↗", "Career roadmap"],
-  ["resume", "▤", "Resume studio"],
-  ["assessments", "◈", "My assessments"],
-];
-
-function Avatar({
-  candidate,
-  size = "medium",
-}: {
-  candidate: Candidate;
-  size?: "small" | "medium" | "large";
-}) {
+function ScoreRing({ score, label, compact = false }: { score: number; label: string; compact?: boolean }) {
+  const angle = Math.round((score / 100) * 360);
   return (
-    <div className={`avatar avatar-${size} ${candidate.color}`}>
-      <span>{candidate.initials}</span>
-      <i aria-label="Verified candidate">✓</i>
+    <div className={`score-ring ${compact ? "compact" : ""}`} style={{ "--score-angle": `${angle}deg` } as React.CSSProperties}>
+      <div className="score-inner"><strong>{score}</strong><span>{compact ? "/100" : label}</span></div>
     </div>
   );
 }
 
-function ScoreRing({
-  value,
-  label,
-  size = "medium",
-  tone = "lime",
-}: {
-  value: number;
-  label?: string;
-  size?: "small" | "medium" | "large";
-  tone?: "lime" | "violet" | "coral";
-}) {
+function SkillPill({ children, state = "neutral" }: { children: React.ReactNode; state?: "neutral" | "good" | "missing" | "verified" }) {
+  return <span className={`skill-pill ${state}`}>{state === "verified" && <Icon name="check" size={13} />}{children}</span>;
+}
+
+function AppHeader({ title, subtitle, onMenu }: { title: string; subtitle: string; onMenu: () => void }) {
   return (
-    <div
-      className={`score-ring score-${size} score-${tone}`}
-      style={{ "--score": `${value * 3.6}deg` } as React.CSSProperties}
-      aria-label={`${label || "Score"}: ${value}`}
-    >
-      <div>
-        <strong>{value}</strong>
-        {label && <span>{label}</span>}
+    <header className="app-header">
+      <button className="icon-button mobile-menu" onClick={onMenu} aria-label="Open navigation"><Icon name="menu" /></button>
+      <div><p className="kicker">{subtitle}</p><h1>{title}</h1></div>
+      <div className="header-actions">
+        <div className="system-status"><span />AI systems ready</div>
+        <button className="avatar-button" aria-label="Open recruiter profile">DP</button>
       </div>
+    </header>
+  );
+}
+
+function ProfileView({ onNavigate }: { onNavigate: (view: View) => void }) {
+  const [resume, setResume] = useState("Ananya_Verma_Resume.pdf");
+  const [github, setGithub] = useState("ananyaverma");
+  const [status, setStatus] = useState<"ready" | "loading" | "done">("ready");
+  const [dragging, setDragging] = useState(false);
+
+  const analyze = () => {
+    setStatus("loading");
+    window.setTimeout(() => setStatus("done"), 1250);
+  };
+
+  if (status === "done") return (
+    <div className="view-wrap profile-results">
+      <div className="result-banner">
+        <div><span className="result-check"><Icon name="check" /></span><div><strong>Talent profile generated</strong><p>Resume and 12 public repositories analyzed in 18 seconds.</p></div></div>
+        <button className="ghost-button" onClick={() => setStatus("ready")}>Analyze another</button>
+      </div>
+
+      <section className="candidate-hero-card">
+        <div className="candidate-primary">
+          <div className="large-avatar">AV<span className="verified-dot"><Icon name="check" size={11}/></span></div>
+          <div><div className="candidate-name-row"><h2>Ananya Verma</h2><span className="verified-label"><Icon name="shield" size={14}/>Verified identity</span></div><p className="role">Full-stack AI Engineer</p><p className="meta">Bengaluru, India · 3 years experience · Open to work</p><div className="skill-list"><SkillPill state="verified">Python</SkillPill><SkillPill state="verified">React</SkillPill><SkillPill state="verified">FastAPI</SkillPill><SkillPill state="verified">LangGraph</SkillPill></div></div>
+        </div>
+        <div className="hero-score"><ScoreRing score={92} label="Talent score"/><div><strong>Top 8%</strong><span>among AI engineers</span></div></div>
+      </section>
+
+      <div className="results-grid">
+        <section className="content-card span-7">
+          <div className="section-heading"><div><p className="kicker">AI SYNTHESIS</p><h3>Talent intelligence brief</h3></div><span className="ai-label"><Icon name="spark" size={14}/>Generated by AI</span></div>
+          <p className="summary-copy">Ananya is a product-minded full-stack engineer who consistently ships AI applications from prototype to production. Her strongest evidence is the depth of work across agent orchestration, API design, and usable React interfaces—not just repository count.</p>
+          <div className="evidence-columns">
+            <div><h4><span className="dot positive"/>Evidence-backed strengths</h4><ul className="evidence-list"><li>Maintains 4 active production-grade repositories</li><li>Strong Python and TypeScript consistency</li><li>Led a 4-person hackathon team to the finals</li></ul></div>
+            <div><h4><span className="dot caution"/>Growth opportunities</h4><ul className="evidence-list"><li>Add automated tests to two core projects</li><li>Demonstrate more cloud deployment depth</li><li>Increase external open-source contributions</li></ul></div>
+          </div>
+        </section>
+
+        <section className="content-card span-5">
+          <div className="section-heading"><div><p className="kicker">SKILL EVIDENCE</p><h3>Capability map</h3></div><span className="confidence">High confidence</span></div>
+          {[['Coding ability',94],['Project quality',91],['Problem solving',89],['Consistency',86]].map(([label,score]) => <div className="bar-row" key={String(label)}><div><span>{label}</span><strong>{score}</strong></div><div className="bar"><i style={{width:`${score}%`}}/></div></div>)}
+        </section>
+
+        <section className="content-card span-7">
+          <div className="section-heading"><div><p className="kicker">GITHUB SIGNALS</p><h3>Proof behind the profile</h3></div><span className="connected"><Icon name="github" size={15}/>ananyaverma</span></div>
+          <div className="repo-list">
+            <div className="repo-row"><div className="repo-icon">AI</div><div><strong>agentflow-studio</strong><p>Visual LangGraph workflow builder with FastAPI runtime.</p><span>Python · 184 stars · Updated 3d ago</span></div><b>96</b></div>
+            <div className="repo-row"><div className="repo-icon">CV</div><div><strong>vision-docs</strong><p>Document intelligence pipeline for structured extraction.</p><span>TypeScript · 93 stars · Updated 8d ago</span></div><b>91</b></div>
+            <div className="repo-row"><div className="repo-icon">HF</div><div><strong>hireflow</strong><p>Semantic candidate-to-role matching experiment.</p><span>Python · 47 stars · Updated 12d ago</span></div><b>88</b></div>
+          </div>
+        </section>
+
+        <section className="content-card span-5 next-card">
+          <p className="kicker">NEXT BEST ACTION</p><h3>Ready to match</h3><p>Use this evidence-rich profile against a live job description, then verify the highest-impact skills.</p>
+          <button className="primary-button full" onClick={() => onNavigate("match")}>Run job match <Icon name="arrow" size={17}/></button>
+          <button className="text-button" onClick={() => onNavigate("verify")}>Start skill verification</button>
+        </section>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="view-wrap profile-start">
+      <section className="hero-intro">
+        <div className="hero-copy"><span className="eyebrow"><Icon name="spark" size={15}/>AI TALENT PROFILE ENGINE</span><h2>Turn scattered proof into one <em>trusted talent profile.</em></h2><p>SkillNova reads the resume, inspects public GitHub work, and connects every claim to real evidence—so recruiters see capability, not just keywords.</p><div className="hero-proof"><span><Icon name="shield" size={17}/>Evidence-linked scoring</span><span><Icon name="bolt" size={17}/>Results in seconds</span><span><Icon name="github" size={17}/>Live repository signals</span></div></div>
+        <div className="metric-cluster"><div className="metric-card main"><span>Talent Score</span><strong>92<small>/100</small></strong><div className="mini-bars"><i/><i/><i/><i/><i/></div><p>Projected from verified evidence</p></div><div className="floating-metric one"><span className="metric-icon"><Icon name="github" size={18}/></span><div><strong>12 repos</strong><small>Analyzed</small></div><Icon name="check" size={16}/></div><div className="floating-metric two"><span className="metric-icon blue"><Icon name="code" size={18}/></span><div><strong>8 skills</strong><small>Evidence-backed</small></div><Icon name="check" size={16}/></div></div>
+      </section>
+
+      <section className="analysis-workbench">
+        <div className="workbench-form">
+          <div className="section-heading"><div><p className="kicker">BUILD A PROFILE</p><h3>Add candidate evidence</h3></div><span className="step-count">Step 1 of 1</span></div>
+          <label className={`upload-zone ${dragging ? "dragging" : ""}`} onDragOver={(e) => {e.preventDefault(); setDragging(true)}} onDragLeave={() => setDragging(false)} onDrop={(e) => {e.preventDefault(); setDragging(false); const file=e.dataTransfer.files[0]; if(file) setResume(file.name)}}>
+            <input type="file" accept=".pdf" onChange={(e) => {const file=e.target.files?.[0]; if(file) setResume(file.name)}}/>
+            <span className="upload-icon"><Icon name="file" size={24}/></span>
+            <div><strong>{resume || "Drop a resume PDF here"}</strong><p>{resume ? "PDF ready for extraction · 1.8 MB" : "or click to browse · PDF up to 10 MB"}</p></div>
+            {resume && <span className="ready-pill"><Icon name="check" size={13}/>Ready</span>}
+          </label>
+          <div className="field-group"><label htmlFor="github">GitHub profile</label><div className="input-shell"><Icon name="github"/><span>github.com/</span><input id="github" value={github} onChange={(e)=>setGithub(e.target.value)} placeholder="username"/></div><small>We only analyze public repositories and contribution signals.</small></div>
+          <button className="primary-button full analyze-button" onClick={analyze} disabled={!resume || !github || status === "loading"}>{status === "loading" ? <><span className="spinner"/>Connecting evidence...</> : <><Icon name="spark" size={18}/>Generate talent profile <Icon name="arrow" size={18}/></>}</button>
+        </div>
+        <div className="pipeline-panel">
+          <p className="kicker">WHAT SKILLNOVA CONNECTS</p><h3>From claims to confidence</h3>
+          <div className="pipeline-step active"><span><Icon name="file"/></span><div><strong>Resume intelligence</strong><p>Skills, education, impact, experience</p></div><b>01</b></div>
+          <div className="pipeline-line"><i/></div>
+          <div className="pipeline-step"><span><Icon name="github"/></span><div><strong>GitHub evidence</strong><p>Code quality, activity, ownership, depth</p></div><b>02</b></div>
+          <div className="pipeline-line"><i/></div>
+          <div className="pipeline-step"><span><Icon name="spark"/></span><div><strong>Unified talent profile</strong><p>Strengths, gaps, suitability, score</p></div><b>03</b></div>
+          <div className="privacy-note"><Icon name="shield" size={18}/><p><strong>Privacy by design</strong><br/>Candidate evidence stays permissioned and transparent.</p></div>
+        </div>
+      </section>
     </div>
   );
 }
 
-function PageHeading({
-  eyebrow,
-  title,
-  copy,
-  action,
-}: {
-  eyebrow: string;
-  title: string;
-  copy: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="page-heading">
-      <div>
-        <span className="eyebrow">{eyebrow}</span>
-        <h1>{title}</h1>
-        <p>{copy}</p>
-      </div>
-      {action && <div className="heading-action">{action}</div>}
+function MatchView({ onNavigate }: { onNavigate: (view: View) => void }) {
+  const [job, setJob] = useState("Senior AI Product Engineer");
+  const [description, setDescription] = useState("We are looking for a product-minded engineer with strong Python, React and FastAPI experience. You will build LLM-powered workflows with LangGraph, ship reliable APIs, work with PostgreSQL and deploy production systems on AWS.");
+  const [matched, setMatched] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const run = () => { setLoading(true); setMatched(false); window.setTimeout(()=>{setLoading(false);setMatched(true)},900) };
+  return <div className="view-wrap">
+    <section className="page-lead"><div><span className="eyebrow"><Icon name="match" size={15}/>SEMANTIC MATCHING</span><h2>Find fit beyond keywords.</h2><p>SkillNova compares role intent with verified candidate evidence and explains every point in the match.</p></div><div className="profile-chip"><div className="small-avatar">AV</div><div><small>Matching candidate</small><strong>Ananya Verma</strong></div><Icon name="check" size={18}/></div></section>
+    <div className="match-layout">
+      <section className="content-card match-form">
+        <div className="section-heading"><div><p className="kicker">ROLE REQUIREMENTS</p><h3>Job description</h3></div><span className="connected"><Icon name="briefcase" size={15}/>Active role</span></div>
+        <div className="field-group"><label htmlFor="job-title">Job title</label><input className="text-input" id="job-title" value={job} onChange={e=>setJob(e.target.value)}/></div>
+        <div className="field-group"><label htmlFor="job-description">Description</label><textarea id="job-description" rows={9} value={description} onChange={e=>setDescription(e.target.value)}/><small>{description.length} characters · Rich enough for semantic analysis</small></div>
+        <button className="primary-button full" onClick={run} disabled={loading}>{loading ? <><span className="spinner"/>Comparing evidence...</> : <><Icon name="spark" size={17}/>Run semantic match <Icon name="arrow" size={17}/></>}</button>
+      </section>
+      <section className={`content-card match-result ${matched ? "visible" : "empty"}`}>
+        {matched ? <>
+          <div className="match-score-head"><ScoreRing score={94} label="Role match"/><div><span className="fit-badge">Exceptional fit</span><h3>{job}</h3><p>Strong evidence across 7 of 9 core requirements.</p></div></div>
+          <div className="explain-score"><p className="kicker">WHY THIS MATCHES</p><div className="match-factor"><span>Skill similarity</span><div className="bar"><i style={{width:'96%'}}/></div><strong>96</strong></div><div className="match-factor"><span>Project relevance</span><div className="bar"><i style={{width:'93%'}}/></div><strong>93</strong></div><div className="match-factor"><span>Experience fit</span><div className="bar"><i style={{width:'88%'}}/></div><strong>88</strong></div></div>
+          <div className="match-skills"><div><h4>Evidence matched</h4><div className="skill-list"><SkillPill state="good">Python</SkillPill><SkillPill state="good">React</SkillPill><SkillPill state="good">FastAPI</SkillPill><SkillPill state="good">LangGraph</SkillPill><SkillPill state="good">PostgreSQL</SkillPill></div></div><div><h4>Skills to validate</h4><div className="skill-list"><SkillPill state="missing">AWS depth</SkillPill><SkillPill state="missing">Observability</SkillPill></div></div></div>
+          <div className="recommendation-box"><Icon name="spark"/><div><strong>AI recommendation</strong><p>Shortlist Ananya. Validate AWS architecture and production monitoring in the interview; her repository evidence strongly predicts fast onboarding.</p></div></div>
+          <button className="primary-button full" onClick={()=>onNavigate("verify")}>Verify priority skills <Icon name="arrow" size={17}/></button>
+        </> : <div className="result-placeholder"><span className="placeholder-icon"><Icon name="match" size={28}/></span><h3>Your match report appears here</h3><p>Run the semantic analysis to compare role intent with candidate evidence.</p></div>}
+      </section>
     </div>
-  );
+  </div>
 }
 
-function MiniSparkline({ points }: { points: number[] }) {
-  return (
-    <div className="sparkline" aria-label="Trend">
-      {points.map((point, index) => (
-        <i key={index} style={{ height: `${point}%` }} />
-      ))}
+function VerifyView({ onNavigate }: { onNavigate: (view: View) => void }) {
+  const [answer, setAnswer] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [question, setQuestion] = useState(1);
+  const sendAnswer = () => { if(!answer.trim()) return; setSubmitted(true); window.setTimeout(()=>{setAnswer(""); setSubmitted(false); setQuestion(2)},1100) };
+  return <div className="view-wrap">
+    <section className="page-lead"><div><span className="eyebrow"><Icon name="verify" size={15}/>SKILL VERIFICATION AGENT</span><h2>Let real capability answer.</h2><p>An adaptive technical interview connects candidate answers to resume claims and repository evidence.</p></div><div className="timer-chip"><Icon name="clock"/><div><small>Session time</small><strong>12:48</strong></div></div></section>
+    <div className="verify-layout">
+      <section className="content-card interview-card">
+        <div className="interview-top"><div className="agent-id"><span><Icon name="spark"/></span><div><strong>Nova · Technical Interviewer</strong><p><i/>Live adaptive interview</p></div></div><span>Question {question} of 5</span></div>
+        <div className="progress-track"><i style={{width: question === 1 ? '20%' : '40%'}}/></div>
+        <div className="chat-window">
+          <div className="agent-message"><span className="chat-avatar"><Icon name="spark" size={17}/></span><div><small>Nova</small><p>{question === 1 ? "In your agentflow-studio repository, you used LangGraph for orchestration. How would you prevent an agent loop from running indefinitely, and where would you store the execution state?" : "Good. Now imagine that checkpoint writes start slowing down under load. How would you diagnose and redesign that part without losing resumability?"}</p><div className="question-signal"><Icon name="github" size={14}/>Grounded in agentflow-studio · LangGraph</div></div></div>
+          {submitted && <div className="user-message"><div><small>You</small><p>{answer}</p></div><span className="chat-avatar user">AV</span></div>}
+        </div>
+        <div className="answer-area"><label htmlFor="answer">Your answer</label><textarea id="answer" rows={5} value={answer} onChange={e=>setAnswer(e.target.value)} placeholder="Explain your approach, trade-offs, and implementation details..."/><div className="answer-footer"><span><Icon name="code" size={15}/>Code snippets supported</span><button className="primary-button" onClick={sendAnswer} disabled={!answer.trim() || submitted}>{submitted ? <><span className="spinner"/>Evaluating...</> : <>Submit answer <Icon name="arrow" size={16}/></>}</button></div></div>
+      </section>
+      <aside className="verify-side">
+        <section className="content-card candidate-mini"><div className="candidate-primary"><div className="small-avatar">AV</div><div><strong>Ananya Verma</strong><p>Full-stack AI Engineer</p></div></div><div className="verification-total"><div><span>Verification score</span><strong>91<small>/100</small></strong></div><span className="fit-badge">High confidence</span></div></section>
+        <section className="content-card"><div className="section-heading"><div><p className="kicker">LIVE EVIDENCE</p><h3>Skills under review</h3></div></div><div className="verify-skill"><span><Icon name="check" size={15}/></span><div><strong>Python</strong><p>Verified · 94 confidence</p></div><b>94</b></div><div className="verify-skill"><span><Icon name="check" size={15}/></span><div><strong>React</strong><p>Verified · 91 confidence</p></div><b>91</b></div><div className="verify-skill current"><span><Icon name="spark" size={15}/></span><div><strong>LangGraph</strong><p>Interviewing now</p></div><b>...</b></div><div className="verify-skill pending"><span>4</span><div><strong>AWS</strong><p>Pending validation</p></div><b>—</b></div></section>
+        <section className="content-card repo-proof"><Icon name="github"/><div><p className="kicker">PROJECT VERIFICATION</p><strong>3 claims cross-checked</strong><span>Resume ↔ repository consistency: 96%</span></div></section>
+        <button className="ghost-button full" onClick={()=>onNavigate("recruiter")}>Preview recruiter report</button>
+      </aside>
     </div>
-  );
+  </div>
 }
 
-function RecruiterOverview({
-  onNavigate,
-  onCandidate,
-  onSearch,
-  saved,
-  toggleSaved,
-}: {
-  onNavigate: (view: string) => void;
-  onCandidate: (candidate: Candidate) => void;
-  onSearch: (query: string) => void;
-  saved: number[];
-  toggleSaved: (id: number) => void;
-}) {
-  const [query, setQuery] = useState("");
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    onSearch(query || "Find top GenAI developers with open-source experience");
-  }
-
-  return (
-    <>
-      <section className="overview-intro">
-        <div>
-          <span className="eyebrow">Thursday · 23 July</span>
-          <h1>
-            Hire what they&apos;ve <em>proven.</em>
-          </h1>
-          <p>
-            Good morning, Arjun. Your AI talent graph found{" "}
-            <strong>18 high-signal candidates</strong> overnight.
-          </p>
-        </div>
-        <button className="button button-dark" onClick={() => onNavigate("pipeline")}>
-          <span>＋</span> Create a job
-        </button>
-      </section>
-
-      <section className="metric-grid">
-        <article className="metric-card featured-metric">
-          <span className="metric-icon">◎</span>
-          <div>
-            <small>Verified talent pool</small>
-            <strong>12,480</strong>
-          </div>
-          <span className="metric-trend positive">↑ 8.4%</span>
-          <MiniSparkline points={[26, 40, 34, 55, 49, 71, 68, 88]} />
-        </article>
-        <article className="metric-card">
-          <span className="metric-icon violet-wash">◇</span>
-          <div>
-            <small>Active roles</small>
-            <strong>24</strong>
-          </div>
-          <span className="metric-trend">6 closing soon</span>
-        </article>
-        <article className="metric-card">
-          <span className="metric-icon blue-wash">◷</span>
-          <div>
-            <small>Avg. time to shortlist</small>
-            <strong>1.8d</strong>
-          </div>
-          <span className="metric-trend positive">↓ 32%</span>
-        </article>
-        <article className="metric-card">
-          <span className="metric-icon coral-wash">◈</span>
-          <div>
-            <small>Quality of hire</small>
-            <strong>91%</strong>
-          </div>
-          <span className="metric-trend positive">↑ 4.1%</span>
-        </article>
-      </section>
-
-      <section className="copilot-card">
-        <div className="copilot-orb">
-          <span>✦</span>
-          <i />
-          <i />
-        </div>
-        <div className="copilot-content">
-          <span className="dark-eyebrow">Proven copilot · Live talent graph</span>
-          <h2>Who are you looking for?</h2>
-          <form onSubmit={submit} className="copilot-search">
-            <label htmlFor="overview-copilot" className="sr-only">
-              Search candidates using natural language
-            </label>
-            <input
-              id="overview-copilot"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="e.g. React developers from Delhi with hackathon wins..."
-            />
-            <button aria-label="Run AI talent search">↗</button>
-          </form>
-          <div className="suggestion-row">
-            {["GenAI + open source", "Top hackathon builders", "Women in ML · Delhi"].map(
-              (item) => (
-                <button key={item} onClick={() => onSearch(item)}>
-                  {item}
-                </button>
-              ),
-            )}
-          </div>
-        </div>
-        <div className="copilot-proof">
-          <span>Evidence sources</span>
-          <div>
-            <b>GH</b>
-            <b>in</b>
-            <b>⌁</b>
-            <b>＋7</b>
-          </div>
-          <small>Refreshed 4m ago</small>
-        </div>
-      </section>
-
-      <section className="section-block">
-        <div className="section-title">
-          <div>
-            <span className="eyebrow">AI-ranked for your open roles</span>
-            <h2>Top talent matches</h2>
-          </div>
-          <button className="text-button" onClick={() => onNavigate("discover")}>
-            Explore all 238 <span>→</span>
-          </button>
-        </div>
-        <div className="candidate-grid">
-          {candidates.slice(0, 3).map((candidate, index) => (
-            <article className="candidate-card" key={candidate.id}>
-              <div className="candidate-top">
-                <span className="rank-tag">0{index + 1}</span>
-                <button
-                  className={`save-button ${saved.includes(candidate.id) ? "saved" : ""}`}
-                  onClick={() => toggleSaved(candidate.id)}
-                  aria-label={
-                    saved.includes(candidate.id)
-                      ? `Remove ${candidate.name} from shortlist`
-                      : `Save ${candidate.name} to shortlist`
-                  }
-                >
-                  {saved.includes(candidate.id) ? "♥" : "♡"}
-                </button>
-              </div>
-              <div className="candidate-person">
-                <Avatar candidate={candidate} size="large" />
-                <ScoreRing value={candidate.match} size="small" />
-              </div>
-              <h3>{candidate.name}</h3>
-              <p>{candidate.role}</p>
-              <span className="candidate-location">⌖ {candidate.location}</span>
-              <div className="tag-row">
-                {candidate.skills.map((skill) => (
-                  <span key={skill}>{skill}</span>
-                ))}
-              </div>
-              <div className="proof-strip">
-                <span>⚡</span>
-                <div>
-                  <small>Strongest proof</small>
-                  <strong>{candidate.proof}</strong>
-                </div>
-              </div>
-              <div className="candidate-footer">
-                <span>
-                  <b>{candidate.talent}</b> Talent score
-                </span>
-                <button onClick={() => onCandidate(candidate)}>View proof →</button>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="dashboard-bottom-grid">
-        <article className="panel pipeline-panel">
-          <div className="section-title compact">
-            <div>
-              <span className="eyebrow">Live pipeline</span>
-              <h2>Hiring momentum</h2>
-            </div>
-            <button className="icon-button" onClick={() => onNavigate("pipeline")}>
-              ↗
-            </button>
-          </div>
-          <div className="pipeline-flow">
-            {[
-              ["Discovered", 238, 72],
-              ["Shortlisted", 46, 50],
-              ["Interview", 18, 36],
-              ["Offer", 7, 22],
-            ].map(([label, value, width], index) => (
-              <div className="pipeline-stage" key={String(label)}>
-                <div>
-                  <span>{label}</span>
-                  <strong>{value}</strong>
-                </div>
-                <i>
-                  <b style={{ width: `${width}%` }} />
-                </i>
-                {index < 3 && <em>→</em>}
-              </div>
-            ))}
-          </div>
-          <div className="pipeline-note">
-            <span>✦</span>
-            <p>
-              <strong>12 candidates</strong> are likely to drop off without action this
-              week.
-            </p>
-            <button>Review</button>
-          </div>
-        </article>
-
-        <article className="panel signal-panel">
-          <div className="section-title compact">
-            <div>
-              <span className="eyebrow">Signals, not noise</span>
-              <h2>Intelligence feed</h2>
-            </div>
-            <span className="live-pill">● Live</span>
-          </div>
-          <div className="signal-list">
-            <div>
-              <span className="signal-icon violet-wash">⚑</span>
-              <p>
-                <strong>8 top performers</strong>
-                <small>from HackNCR now match your AI roles</small>
-              </p>
-              <time>8m</time>
-            </div>
-            <div>
-              <span className="signal-icon blue-wash">⌘</span>
-              <p>
-                <strong>Naina merged a major OSS PR</strong>
-                <small>Project relevance increased to 94%</small>
-              </p>
-              <time>22m</time>
-            </div>
-            <div>
-              <span className="signal-icon coral-wash">!</span>
-              <p>
-                <strong>2 profile risks detected</strong>
-                <small>Duplicate project evidence requires review</small>
-              </p>
-              <time>1h</time>
-            </div>
-          </div>
-        </article>
-      </section>
-    </>
-  );
-}
-
-function TalentDiscovery({
-  initialQuery,
-  onCandidate,
-  saved,
-  toggleSaved,
-  notify,
-}: {
-  initialQuery: string;
-  onCandidate: (candidate: Candidate) => void;
-  saved: number[];
-  toggleSaved: (id: number) => void;
-  notify: (message: string) => void;
-}) {
-  const [query, setQuery] = useState(initialQuery);
-  const [searched, setSearched] = useState(Boolean(initialQuery));
-
-  function runSearch(event?: FormEvent) {
-    event?.preventDefault();
-    setSearched(true);
-  }
-
-  return (
-    <>
-      <PageHeading
-        eyebrow="AI talent discovery"
-        title="Search for proof, not keywords."
-        copy="Describe your ideal candidate in plain English. Proven searches skills, projects, communities, code, and verified performance."
-        action={
-          <button className="button button-outline" onClick={() => notify("Search saved to your talent alerts")}>
-            ☆ Save this search
-          </button>
-        }
-      />
-      <form className="discovery-search" onSubmit={runSearch}>
-        <span>✦</span>
-        <label htmlFor="discovery-query" className="sr-only">
-          Describe the candidates you want to find
-        </label>
-        <input
-          id="discovery-query"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Find React developers with GenAI and hackathon experience in Delhi"
-        />
-        <button>Find talent ↗</button>
-      </form>
-      <div className="filter-row">
-        <button className="filter-button active">Best match</button>
-        <button className="filter-button">Location · India</button>
-        <button className="filter-button">Talent score · 80+</button>
-        <button className="filter-button">Experience · 2–5 yrs</button>
-        <button className="filter-button">More filters ＋</button>
-        <span>{searched ? "238 evidence-backed results" : "12,480 verified profiles"}</span>
-      </div>
-
-      {searched && (
-        <div className="ai-interpretation">
-          <span>✦</span>
-          <p>
-            <small>I translated your request into</small>
-            <strong>
-              React or Next.js · GenAI projects · ≥1 hackathon · Delhi NCR · active in
-              the last 90 days
-            </strong>
-          </p>
-          <button>Edit logic</button>
-        </div>
-      )}
-
-      <div className="results-layout">
-        <div className="results-list">
-          {candidates.map((candidate) => (
-            <article className="result-card" key={candidate.id}>
-              <Avatar candidate={candidate} size="large" />
-              <div className="result-main">
-                <div className="result-name">
-                  <div>
-                    <h3>{candidate.name}</h3>
-                    <p>
-                      {candidate.role} · {candidate.experience} · {candidate.location}
-                    </p>
-                  </div>
-                  <div className="result-actions">
-                    <button
-                      className={`save-button ${saved.includes(candidate.id) ? "saved" : ""}`}
-                      onClick={() => toggleSaved(candidate.id)}
-                    >
-                      {saved.includes(candidate.id) ? "♥" : "♡"}
-                    </button>
-                    <button className="button button-small" onClick={() => onCandidate(candidate)}>
-                      View profile
-                    </button>
-                  </div>
-                </div>
-                <div className="tag-row">
-                  {candidate.skills.map((skill) => (
-                    <span key={skill}>{skill}</span>
-                  ))}
-                  <span className="verified-tag">✓ Identity verified</span>
-                </div>
-                <div className="evidence-grid">
-                  <div>
-                    <small>Strongest evidence</small>
-                    <strong>{candidate.proof}</strong>
-                  </div>
-                  <div>
-                    <small>Technical consistency</small>
-                    <strong>{candidate.activity}</strong>
-                  </div>
-                  <div>
-                    <small>Authenticity</small>
-                    <strong>{candidate.authenticity}/100 · Low risk</strong>
-                  </div>
-                </div>
-              </div>
-              <div className="match-score-block">
-                <ScoreRing value={candidate.match} size="medium" />
-                <strong>{candidate.match}% match</strong>
-                <span>Skills 96 · Projects 94</span>
-              </div>
-            </article>
-          ))}
-        </div>
-        <aside className="search-insights">
-          <span className="eyebrow">Search intelligence</span>
-          <h3>What makes a top match?</h3>
-          <div className="weight-list">
-            {[
-              ["Verified skills", 94],
-              ["Project relevance", 88],
-              ["Technical consistency", 81],
-              ["Hackathon signal", 76],
-              ["Culture indicators", 68],
-            ].map(([label, value]) => (
-              <div key={String(label)}>
-                <span>
-                  {label} <b>{value}%</b>
-                </span>
-                <i>
-                  <b style={{ width: `${value}%` }} />
-                </i>
-              </div>
-            ))}
-          </div>
-          <div className="insight-callout">
-            <span>✦</span>
-            <p>
-              Expanding to Gurugram adds <strong>41 qualified candidates</strong> with
-              no quality loss.
-            </p>
-            <button onClick={() => notify("Gurugram added to this search")}>Expand area</button>
-          </div>
-        </aside>
-      </div>
-    </>
-  );
-}
-
-function HiringPipeline({ notify }: { notify: (message: string) => void }) {
-  const stages = [
-    { title: "AI shortlisted", count: 12, people: candidates.slice(0, 3) },
-    { title: "Assessment", count: 7, people: [candidates[1], candidates[3]] },
-    { title: "Interview", count: 4, people: [candidates[0], candidates[2]] },
-    { title: "Offer", count: 2, people: [candidates[3]] },
+function HackathonView({ onNavigate }: { onNavigate: (view: View) => void }) {
+  const [activeProject, setActiveProject] = useState(0);
+  const [invited, setInvited] = useState(false);
+  const projects = [
+    {name:"JalDrishti", team:"Team Aether", rank:"Winner", initials:"JA", score:94, innovation:96, feasibility:89, desc:"Computer-vision water quality monitoring for rural communities, with low-cost edge sensors and multilingual alerts.", stack:["Python","YOLOv8","FastAPI","React"], members:["AV","RN","SK","PM"]},
+    {name:"GridWise", team:"Volt Labs", rank:"Runner-up", initials:"GW", score:91, innovation:92, feasibility:90, desc:"AI demand forecasting that helps campuses reduce peak energy use and visualize savings in real time.", stack:["PyTorch","Next.js","PostgreSQL"], members:["MN","KS","AR"]},
+    {name:"Sahayak", team:"Civic Stack", rank:"Top 5", initials:"SA", score:88, innovation:90, feasibility:84, desc:"A multilingual civic-assistance agent that guides residents through public services using verified sources.", stack:["LangGraph","RAG","TypeScript"], members:["RM","PD","NT"]}
   ];
-  return (
-    <>
-      <PageHeading
-        eyebrow="Recruitment pipeline"
-        title="From signal to signed."
-        copy="AI-ranked candidates for Senior GenAI Engineer · Delhi NCR"
-        action={
-          <button className="button button-dark" onClick={() => notify("New candidate flow opened")}>
-            ＋ Add candidate
-          </button>
-        }
-      />
-      <div className="pipeline-toolbar">
-        <div className="job-switcher">
-          <span>GE</span>
-          <p>
-            <strong>Senior GenAI Engineer</strong>
-            <small>24 candidates · 2 openings</small>
-          </p>
-          <button>⌄</button>
-        </div>
-        <div className="pipeline-metrics">
-          <span>
-            <small>Velocity</small>
-            <b>1.8 days/stage</b>
-          </span>
-          <span>
-            <small>Forecast</small>
-            <b>2 hires by Aug 08</b>
-          </span>
-          <button className="button button-outline">⋯</button>
-        </div>
-      </div>
-      <div className="kanban">
-        {stages.map((stage, stageIndex) => (
-          <section className="kanban-column" key={stage.title}>
-            <header>
-              <span className={`stage-dot stage-${stageIndex}`} />
-              <strong>{stage.title}</strong>
-              <b>{stage.count}</b>
-              <button>＋</button>
-            </header>
-            {stage.people.map((candidate, index) => (
-              <article className="kanban-card" key={`${stage.title}-${candidate.id}`}>
-                <div className="kanban-person">
-                  <Avatar candidate={candidate} size="small" />
-                  <p>
-                    <strong>{candidate.name}</strong>
-                    <small>{candidate.role}</small>
-                  </p>
-                  <b className="match-chip">{candidate.match}%</b>
-                </div>
-                <div className="kanban-tags">
-                  <span>{stageIndex === 0 ? candidate.proof : stageIndex === 1 ? "Assessment ready" : stageIndex === 2 ? "Interview · Today" : "Offer drafted"}</span>
-                </div>
-                <footer>
-                  <span>Talent {candidate.talent}</span>
-                  <span>{index === 0 ? "Today" : "2d ago"}</span>
-                </footer>
-              </article>
-            ))}
-            <button className="column-action" onClick={() => notify(`Candidate added to ${stage.title}`)}>
-              ＋ Add candidate
-            </button>
-          </section>
-        ))}
-      </div>
-      <div className="pipeline-ai-banner">
-        <span>✦</span>
-        <div>
-          <strong>Pipeline health is strong</strong>
-          <p>Move Naina Rao to interview — her assessment score is in the top 4%.</p>
-        </div>
-        <button onClick={() => notify("Naina moved to Interview")}>Move Naina →</button>
-      </div>
-    </>
-  );
-}
-
-function Assessments({ notify, candidateMode = false }: { notify: (message: string) => void; candidateMode?: boolean }) {
-  const [interviewing, setInterviewing] = useState(false);
-  return (
-    <>
-      <PageHeading
-        eyebrow={candidateMode ? "Skill verification" : "AI assessment studio"}
-        title={candidateMode ? "Turn ability into evidence." : "Assess potential, consistently."}
-        copy={
-          candidateMode
-            ? "Complete adaptive assessments and AI interviews to strengthen your verified talent identity."
-            : "Coding, project, repository, and conversational assessments — one evidence trail, zero screening chaos."
-        }
-        action={
-          <button className="button button-dark" onClick={() => setInterviewing(true)}>
-            {candidateMode ? "Start practice interview" : "＋ Create assessment"}
-          </button>
-        }
-      />
-      <section className="assessment-stats">
-        {[
-          [candidateMode ? "Completed" : "In progress", candidateMode ? "08" : "34", "◈", "violet-wash"],
-          [candidateMode ? "Avg. score" : "Completion rate", candidateMode ? "88%" : "87%", "◎", "blue-wash"],
-          [candidateMode ? "Strongest area" : "Top performers", candidateMode ? "System design" : "12", "↗", "green-wash"],
-          [candidateMode ? "Verified skills" : "Hours saved", candidateMode ? "14" : "86h", "◷", "coral-wash"],
-        ].map(([label, value, icon, tone]) => (
-          <article key={label}>
-            <span className={tone}>{icon}</span>
-            <p>
-              <small>{label}</small>
-              <strong>{value}</strong>
-            </p>
-          </article>
-        ))}
-      </section>
-      <div className="assessment-grid">
-        <article className="panel assessment-list">
-          <div className="section-title compact">
-            <div>
-              <span className="eyebrow">{candidateMode ? "Your verification" : "Active assessments"}</span>
-              <h2>{candidateMode ? "Evidence in progress" : "Senior GenAI Engineer"}</h2>
-            </div>
-            <button className="text-button">View all →</button>
-          </div>
-          {[
-            ["Coding · RAG Pipeline", 92, "Completed", "Top 6%"],
-            ["GitHub repository analysis", 88, "Verified", "Strong"],
-            ["AI technical interview", 84, candidateMode ? "Completed" : "12 pending", "Good"],
-            ["Communication & behavior", 79, candidateMode ? "Improve" : "8 pending", "Fair"],
-          ].map(([title, score, status, rating], index) => (
-            <div className="assessment-row" key={String(title)}>
-              <span className={`assessment-number tone-${index}`}>0{index + 1}</span>
-              <div>
-                <strong>{title}</strong>
-                <small>{status}</small>
-              </div>
-              <i>
-                <b style={{ width: `${score}%` }} />
-              </i>
-              <span className="assessment-score">{score}</span>
-              <b className="rating-pill">{rating}</b>
-            </div>
-          ))}
-        </article>
-        <article className="interview-card">
-          <div className="interview-visual">
-            <div className="ai-face">
-              <span>✦</span>
-              <i />
-            </div>
-            <div className="audio-wave">
-              {[18, 34, 52, 30, 68, 42, 58, 24, 48, 30].map((height, i) => (
-                <i key={i} style={{ height }} />
-              ))}
-            </div>
-          </div>
-          <span className="dark-eyebrow">AI interview agent</span>
-          <h2>Structured. Adaptive. Human.</h2>
-          <p>
-            Technical depth, communication, reasoning, and confidence — evaluated
-            against the role, not a generic script.
-          </p>
-          <div className="interview-scores">
-            <span><b>91</b> Technical</span>
-            <span><b>86</b> Communication</span>
-            <span><b>89</b> Confidence</span>
-          </div>
-          <button onClick={() => setInterviewing(true)}>
-            {candidateMode ? "Practice with AI" : "Preview interview"} →
-          </button>
-        </article>
-      </div>
-      {interviewing && (
-        <div className="interview-overlay" role="dialog" aria-modal="true" aria-label="AI interview">
-          <div className="interview-modal">
-            <button className="modal-close" onClick={() => setInterviewing(false)} aria-label="Close interview">
-              ×
-            </button>
-            <span className="modal-kicker">AI interview · Question 03 of 08</span>
-            <div className="ai-face large"><span>✦</span><i /></div>
-            <h2>How would you reduce hallucinations in a production RAG system?</h2>
-            <p>Think aloud. I may ask a follow-up based on your approach.</p>
-            <div className="recording-status"><i /> Listening · 00:18</div>
-            <div className="modal-actions">
-              <button className="button button-outline" onClick={() => setInterviewing(false)}>End session</button>
-              <button className="button button-dark" onClick={() => { setInterviewing(false); notify("Answer saved · strong retrieval reasoning detected"); }}>Submit answer →</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-function Hackathons({ notify }: { notify: (message: string) => void }) {
-  const ranking = [
-    ["01", "VectorShift", "Aarav · Riya · Manas", "Civic AI", 94, "Delhi"],
-    ["02", "Prism Labs", "Naina · Aditi · Dev", "Climate Tech", 91, "Bengaluru"],
-    ["03", "Null Pointers", "Kabir · Noor · Om", "FinTech", 88, "Gurugram"],
-    ["04", "Flowstate", "Ishita · Anay · Tara", "Developer Tools", 86, "Pune"],
-  ];
-  return (
-    <>
-      <PageHeading
-        eyebrow="Hackathon-to-hiring"
-        title="Where builders become hires."
-        copy="Turn live performance, teamwork, and innovation into a trusted talent pipeline."
-        action={<button className="button button-dark" onClick={() => notify("Hackathon connection flow opened")}>＋ Connect hackathon</button>}
-      />
-      <section className="hackathon-hero">
-        <div>
-          <span className="dark-eyebrow">Live event · 1,842 builders</span>
-          <h2>Build India AI<br />Challenge 2026</h2>
-          <p>Top 8% of performers now available to your talent graph.</p>
-          <div className="hackathon-actions">
-            <button onClick={() => notify("Top 50 performers added to your shortlist")}>Access top performers ↗</button>
-            <span>Ends in 02d : 18h : 42m</span>
-          </div>
-        </div>
-        <div className="event-score">
-          <span>Innovation pulse</span>
-          <strong>88.4</strong>
-          <MiniSparkline points={[30, 55, 40, 76, 52, 82, 70, 95, 86]} />
-        </div>
-      </section>
-      <section className="hackathon-stats">
-        {[
-          ["Teams analyzed", "428", "+86 today"],
-          ["Verified contributors", "1,624", "88.2%"],
-          ["Recruiter shortlists", "284", "+42 today"],
-          ["Direct interviews", "61", "14 scheduled"],
-        ].map(([label, value, note]) => (
-          <article key={label}><small>{label}</small><strong>{value}</strong><span>{note}</span></article>
-        ))}
-      </section>
-      <section className="ranking-panel panel">
-        <div className="section-title compact">
-          <div><span className="eyebrow">AI-evaluated leaderboard</span><h2>Top performing teams</h2></div>
-          <div className="leaderboard-legend"><span>Innovation</span><span>Technical</span><span>Teamwork</span></div>
-        </div>
-        <div className="ranking-table">
-          {ranking.map(([rank, team, members, track, score, location], index) => (
-            <div className="ranking-row" key={String(team)}>
-              <strong className={`rank-number rank-${index}`}>{rank}</strong>
-              <div className={`team-mark team-${index}`}>{String(team).slice(0, 1)}</div>
-              <p><strong>{team}</strong><small>{members}</small></p>
-              <span className="track-tag">{track}</span>
-              <span className="ranking-location">⌖ {location}</span>
-              <div className="team-score"><b>{score}</b><small>Pitch score</small></div>
-              <button onClick={() => notify(`${team} added to your hackathon watchlist`)}>View team →</button>
-            </div>
-          ))}
-        </div>
-      </section>
-    </>
-  );
-}
-
-function PitchAnalyzer({ notify }: { notify: (message: string) => void }) {
-  const [analyzed, setAnalyzed] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-
-  function analyze() {
-    setAnalyzing(true);
-    window.setTimeout(() => {
-      setAnalyzing(false);
-      setAnalyzed(true);
-      notify("Pitch analysis complete · Overall score 88");
-    }, 1250);
-  }
-
-  return (
-    <>
-      <PageHeading
-        eyebrow="Presentation intelligence"
-        title="Read the idea behind the slides."
-        copy="Evaluate clarity, technical depth, innovation, business potential, and content authenticity in minutes."
-        action={<span className="secure-badge">⌾ Files are private & encrypted</span>}
-      />
-      {!analyzed ? (
-        <section className="upload-stage">
-          <div className="upload-orbit"><span>▱</span><i /><i /><i /></div>
-          <span className="eyebrow">PPT · PPTX · PDF · up to 50 MB</span>
-          <h2>{analyzing ? "Reading every slide..." : "Drop a pitch deck here"}</h2>
-          <p>{analyzing ? "Mapping the narrative, claims, technical architecture, and market evidence." : "We’ll analyze the story, substance, feasibility, and originality."}</p>
-          {analyzing ? (
-            <div className="analysis-loader"><i /><span>Analyzing slide 12 of 18</span></div>
-          ) : (
-            <div className="upload-actions">
-              <label className="button button-dark">
-                Choose a presentation
-                <input type="file" accept=".ppt,.pptx,.pdf" onChange={analyze} />
-              </label>
-              <button className="button button-outline" onClick={analyze}>Analyze sample deck</button>
-            </div>
-          )}
-          <div className="analysis-features">
-            <span>✓ 5-dimension scoring</span>
-            <span>✓ Plagiarism & AI signals</span>
-            <span>✓ Actionable feedback</span>
-          </div>
-        </section>
-      ) : (
-        <>
-          <section className="pitch-summary">
-            <div className="deck-preview">
-              <div className="deck-slide">
-                <span className="mini-brand">ECOLOOP</span>
-                <strong>Waste,<br />reimagined.</strong>
-                <small>AI-powered circular logistics</small>
-                <i>01</i>
-              </div>
-              <div className="deck-meta">
-                <span>EcoLoop_Seed_Deck.pdf</span><small>18 slides · 8.4 MB</small>
-              </div>
-            </div>
-            <div className="pitch-overview">
-              <span className="eyebrow">Analysis complete · 48 seconds</span>
-              <h2>Clear problem. Credible tech.<br /><em>Sharpen the business proof.</em></h2>
-              <p>
-                EcoLoop presents a compelling circular-logistics platform with a
-                technically plausible matching engine. The market narrative is strong,
-                but unit economics and defensibility need harder evidence.
-              </p>
-              <div className="authenticity-row">
-                <span><b>96%</b> Originality confidence</span>
-                <span><b>Low</b> AI-generation risk</span>
-                <span><b>0</b> Copied passages</span>
-              </div>
-            </div>
-            <div className="overall-pitch-score">
-              <ScoreRing value={88} label="Overall" size="large" tone="violet" />
-              <span>Top 12% of decks</span>
-              <button onClick={() => notify("Pitch report exported")}>Export report ↗</button>
-            </div>
-          </section>
-          <section className="score-dimensions">
-            {[
-              ["Innovation", 92, "Original insight"],
-              ["Technical feasibility", 89, "Architecture holds"],
-              ["Presentation quality", 91, "Clear narrative"],
-              ["Business potential", 78, "Needs proof"],
-              ["Problem clarity", 94, "Exceptionally clear"],
-            ].map(([label, value, note], index) => (
-              <article key={String(label)}>
-                <span className={`dimension-number dim-${index}`}>0{index + 1}</span>
-                <small>{label}</small>
-                <strong>{value}</strong>
-                <i><b style={{ width: `${value}%` }} /></i>
-                <span>{note}</span>
-              </article>
-            ))}
-          </section>
-          <div className="pitch-detail-grid">
-            <article className="panel feedback-panel">
-              <div className="section-title compact">
-                <div><span className="eyebrow">AI recommendations</span><h2>Three moves to strengthen the pitch</h2></div>
-                <span className="ai-label">✦ Proven AI</span>
-              </div>
-              {[
-                ["Lead with measurable urgency", "Slide 03", "Replace the broad waste statistic with the ₹/day logistics loss for your target customer. It makes the pain immediate."],
-                ["Prove the economic loop", "Slide 11", "Add a cohort view of contribution margin after collection density reaches 65%. Investors will test this assumption."],
-                ["Make the moat tangible", "Slide 14", "Show how routing data improves matching accuracy over time. Your compounding data advantage is currently buried."],
-              ].map(([title, slide, copy], index) => (
-                <div className="feedback-item" key={String(title)}>
-                  <span>0{index + 1}</span>
-                  <div><strong>{title}</strong><small>{slide}</small><p>{copy}</p></div>
-                  <button aria-label={`Open ${slide}`}>↗</button>
-                </div>
-              ))}
-            </article>
-            <article className="panel narrative-panel">
-              <span className="eyebrow">Narrative arc</span>
-              <h2>Audience attention</h2>
-              <div className="attention-chart">
-                {[42, 58, 72, 88, 76, 68, 74, 92, 86, 65, 58, 72, 80, 90, 84, 76, 70, 82].map((h, i) => (
-                  <i key={i} style={{ height: `${h}%` }}><b>{i + 1}</b></i>
-                ))}
-              </div>
-              <div className="attention-notes"><span>Strong opening</span><span>Dip at business model</span><span>Confident close</span></div>
-            </article>
-          </div>
-        </>
-      )}
-    </>
-  );
-}
-
-function HiringAnalytics() {
-  return (
-    <>
-      <PageHeading
-        eyebrow="Predictive hiring analytics"
-        title="See what your funnel is saying."
-        copy="Quality, velocity, equity, and hiring outcomes — connected to the evidence that created them."
-        action={<button className="button button-outline">Last 90 days ⌄</button>}
-      />
-      <section className="analytics-hero">
-        <div>
-          <span className="dark-eyebrow">Hiring quality index</span>
-          <strong>91.4</strong>
-          <span className="big-trend">↑ 6.2 this quarter</span>
-          <p>Driven by stronger project-relevance weighting and structured interviews.</p>
-        </div>
-        <div className="quality-chart">
-          {[32, 38, 44, 48, 45, 57, 62, 67, 64, 76, 81, 88].map((point, i) => (
-            <i key={i} style={{ height: `${point}%` }}><b /></i>
-          ))}
-          <span className="chart-label label-start">Apr</span>
-          <span className="chart-label label-mid">Jun</span>
-          <span className="chart-label label-end">Jul</span>
-        </div>
-        <div className="forecast-card">
-          <span>✦ Forecast</span>
-          <strong>17 hires</strong>
-          <p>likely to close in the next 30 days</p>
-          <small>92% confidence</small>
-        </div>
-      </section>
-      <section className="analytics-grid">
-        <article className="panel source-panel">
-          <div className="section-title compact"><div><span className="eyebrow">Quality by source</span><h2>Where great hires begin</h2></div><button className="icon-button">⋯</button></div>
-          {[
-            ["Hackathons", 94, 28, "violet"],
-            ["Open source", 91, 24, "blue"],
-            ["Communities", 86, 19, "coral"],
-            ["Direct applicants", 74, 29, "gray"],
-          ].map(([source, quality, share, tone]) => (
-            <div className="source-row" key={String(source)}>
-              <span className={`source-dot ${tone}`} />
-              <strong>{source}</strong>
-              <i><b style={{ width: `${quality}%` }} /></i>
-              <span><b>{quality}</b> quality</span>
-              <small>{share}% hires</small>
-            </div>
-          ))}
-        </article>
-        <article className="panel diversity-panel">
-          <span className="eyebrow">Talent reach</span>
-          <h2>Opportunity footprint</h2>
-          <div className="heatmap">
-            {Array.from({ length: 63 }, (_, i) => <i key={i} className={`heat-${(i * 7 + i % 5) % 5}`} />)}
-          </div>
-          <div className="heatmap-stats"><span><b>42</b> campuses</span><span><b>18</b> communities</span><span><b>64%</b> beyond metros</span></div>
-        </article>
-      </section>
-      <section className="analytics-metrics">
-        {[
-          ["Time to hire", "12.4d", "↓ 31%", "Target 15d"],
-          ["Assessment accuracy", "89%", "↑ 7%", "vs. interview"],
-          ["Offer acceptance", "84%", "↑ 4%", "Industry 72%"],
-          ["First-90d retention", "96%", "↑ 3%", "Cohort 2026"],
-        ].map(([label, value, trend, note]) => (
-          <article key={label}><span>{label}</span><strong>{value}</strong><b>{trend}</b><small>{note}</small></article>
-        ))}
-      </section>
-    </>
-  );
-}
-
-function CandidateOverview({
-  onNavigate,
-  notify,
-}: {
-  onNavigate: (view: string) => void;
-  notify: (message: string) => void;
-}) {
-  return (
-    <>
-      <section className="candidate-hero">
-        <div className="candidate-identity">
-          <div className="large-profile-avatar">AV<span>✓</span></div>
-          <div>
-            <span className="eyebrow">Verified talent identity</span>
-            <h1>Ananya Verma</h1>
-            <p>AI Product Engineer · New Delhi, India</p>
-            <div className="tag-row">
-              <span>Open to work</span><span>2.8 yrs experience</span><span>₹18–24 LPA</span>
-            </div>
-          </div>
-        </div>
-        <div className="candidate-hero-actions">
-          <button className="button button-outline" onClick={() => onNavigate("resume")}>▤ Build resume</button>
-          <button className="button button-dark" onClick={() => notify("Public talent profile copied")}>↗ Share profile</button>
-        </div>
-      </section>
-      <section className="talent-score-hero">
-        <div className="score-story">
-          <span className="dark-eyebrow">Proven Talent Score™</span>
-          <h2>Your evidence is getting stronger.</h2>
-          <p>You&apos;re in the <strong>top 8%</strong> of AI product engineers with 2–4 years of experience.</p>
-          <div className="score-movement"><span>↑ 4 points</span> in the last 30 days · 3 new verified signals</div>
-        </div>
-        <ScoreRing value={88} label="Excellent" size="large" />
-        <div className="score-factors">
-          {[
-            ["Coding ability", 91],
-            ["Project quality", 94],
-            ["Problem solving", 89],
-            ["Innovation", 86],
-            ["Leadership", 78],
-            ["Community", 82],
-          ].map(([label, value]) => (
-            <div key={String(label)}><span>{label}<b>{value}</b></span><i><b style={{ width: `${value}%` }} /></i></div>
-          ))}
-        </div>
-      </section>
-      <section className="candidate-kpis">
-        {[
-          ["Profile views", "148", "↑ 28% this week", "◎"],
-          ["Recruiter saves", "24", "8 new", "♡"],
-          ["Job matches", "36", "12 above 90%", "◇"],
-          ["Authenticity", "98", "Very low risk", "✓"],
-        ].map(([label, value, note, icon], index) => (
-          <article key={label}><span className={`kpi-icon kpi-${index}`}>{icon}</span><div><small>{label}</small><strong>{value}</strong><b>{note}</b></div></article>
-        ))}
-      </section>
-      <div className="candidate-main-grid">
-        <article className="panel job-match-panel">
-          <div className="section-title compact">
-            <div><span className="eyebrow">Curated for your evidence</span><h2>Best job matches</h2></div>
-            <button className="text-button" onClick={() => onNavigate("opportunities")}>View all 36 →</button>
-          </div>
-          {[
-            ["V", "Vercel Labs", "AI Product Engineer", "Remote · India", 96, "violet"],
-            ["R", "Razorpay", "Senior ML Engineer", "Bengaluru · Hybrid", 92, "blue"],
-            ["A", "Atlassian", "AI Platform Engineer", "Remote · India", 89, "coral"],
-          ].map(([mark, company, role, location, match, tone]) => (
-            <div className="job-row" key={String(company)}>
-              <span className={`company-mark ${tone}`}>{mark}</span>
-              <p><strong>{role}</strong><small>{company} · {location}</small></p>
-              <div className="job-reason"><small>Why you match</small><span>Projects · GenAI · Product</span></div>
-              <b className="job-match">{match}%</b>
-              <button onClick={() => notify(`${company} role saved`)}>♡</button>
-            </div>
-          ))}
-        </article>
-        <article className="panel roadmap-preview">
-          <span className="eyebrow">Next best move</span>
-          <h2>Move toward<br />AI Tech Lead</h2>
-          <div className="roadmap-progress"><i><b style={{ width: "68%" }} /></i><span>68% role-ready</span></div>
-          <div className="next-skill"><span>01</span><p><small>Highest-impact skill gap</small><strong>Production LLMOps</strong><b>+6 score potential</b></p></div>
-          <div className="next-skill"><span>02</span><p><small>Leadership signal</small><strong>Mentor one OSS project</strong><b>+4 score potential</b></p></div>
-          <button onClick={() => onNavigate("roadmap")}>Open my roadmap →</button>
-        </article>
-      </div>
-      <section className="evidence-strip">
-        <div><span className="eyebrow">Fresh evidence</span><h2>Your activity, translated.</h2></div>
-        {[
-          ["GH", "Merged PR #284", "LangChain community · +2 coding"],
-          ["⚑", "Top 10 · HackNCR", "Multimodal accessibility · +3 innovation"],
-          ["✓", "AWS ML Specialty", "Credential verified · +2 consistency"],
-        ].map(([icon, title, copy]) => (
-          <article key={String(title)}><span>{icon}</span><p><strong>{title}</strong><small>{copy}</small></p></article>
-        ))}
-      </section>
-    </>
-  );
-}
-
-function TalentIdentity() {
-  return (
-    <>
-      <PageHeading
-        eyebrow="AI talent profile engine"
-        title="Your work, made legible."
-        copy="A living identity built from verified projects, code, credentials, communities, and performance."
-        action={<button className="button button-dark">↗ Share verified profile</button>}
-      />
-      <div className="identity-layout">
-        <aside className="profile-card panel">
-          <div className="large-profile-avatar">AV<span>✓</span></div>
-          <h2>Ananya Verma</h2><p>AI Product Engineer</p><span>New Delhi · India</span>
-          <div className="profile-score-row"><ScoreRing value={88} size="medium" /><div><strong>Excellent</strong><small>Top 8% in cohort</small></div></div>
-          <div className="profile-links"><button>GH GitHub connected <b>✓</b></button><button>in LinkedIn verified <b>✓</b></button><button>▤ Resume analyzed <b>✓</b></button></div>
-          <div className="auth-score"><span>Authenticity score</span><strong>98/100</strong><small>Very low fraud risk</small></div>
-        </aside>
-        <main className="identity-main">
-          <section className="panel skill-evidence-panel">
-            <div className="section-title compact"><div><span className="eyebrow">Verified skill graph</span><h2>Capabilities with receipts</h2></div><button className="text-button">View graph →</button></div>
-            <div className="skill-cloud">
-              {[
-                ["Generative AI", 94, "Expert", "violet"],
-                ["Python", 92, "Expert", "blue"],
-                ["Product thinking", 89, "Advanced", "coral"],
-                ["RAG systems", 88, "Advanced", "green"],
-                ["React", 84, "Advanced", "yellow"],
-                ["MLOps", 76, "Proficient", "gray"],
-              ].map(([skill, score, level, tone]) => (
-                <article className={`skill-tile ${tone}`} key={String(skill)}><span>{score}</span><div><strong>{skill}</strong><small>✓ {level} · Verified</small></div></article>
-              ))}
-            </div>
-          </section>
-          <section className="panel project-evidence">
-            <div className="section-title compact"><div><span className="eyebrow">Signature work</span><h2>Projects that prove it</h2></div><button className="text-button">＋ Add project</button></div>
-            {[
-              ["01", "A11y Lens", "Multimodal AI assistant for visually impaired commuters.", ["GenAI", "Vision", "React"], "94", "HackNCR top 10"],
-              ["02", "Tracebench", "Open-source evaluation suite for production RAG systems.", ["Python", "RAG", "OSS"], "91", "428 GitHub stars"],
-              ["03", "CarbonRoute", "ML optimization for low-emission last-mile delivery.", ["ML", "Maps", "Product"], "86", "2 pilot partners"],
-            ].map(([num, title, copy, tags, score, proof]) => (
-              <article key={String(title)}><span className="project-num">{num}</span><div><strong>{title}</strong><p>{copy}</p><div className="tag-row">{(tags as string[]).map(tag => <span key={tag}>{tag}</span>)}</div></div><div className="project-proof"><b>{score}</b><small>Quality score</small><span>⚡ {proof}</span></div></article>
-            ))}
-          </section>
-        </main>
-      </div>
-    </>
-  );
-}
-
-function Opportunities({ notify }: { notify: (message: string) => void }) {
-  return (
-    <>
-      <PageHeading eyebrow="AI job matching" title="Roles that fit the real you." copy="Matches ranked by verified capability, relevant projects, growth potential, and work preferences." action={<button className="button button-outline">Tune preferences</button>} />
-      <div className="opportunity-banner"><span>✦</span><p><strong>Your market is moving.</strong> GenAI product roles matching your profile are up 18% this month. Your estimated range is <b>₹19–26 LPA</b>.</p><button>View salary insight →</button></div>
-      <div className="opportunity-layout">
-        <div className="opportunity-list">
-          {[
-            ["V", "AI Product Engineer", "Vercel Labs", "Remote · India", 96, "₹22–28 LPA", "Applied by 18", "violet"],
-            ["R", "Senior ML Engineer", "Razorpay", "Bengaluru · Hybrid", 92, "₹24–30 LPA", "Actively hiring", "blue"],
-            ["A", "AI Platform Engineer", "Atlassian", "Remote · India", 89, "₹20–27 LPA", "Posted 2d ago", "coral"],
-            ["C", "GenAI Solutions Engineer", "CRED", "Bengaluru · On-site", 87, "₹22–26 LPA", "Team viewed profile", "green"],
-          ].map(([mark, role, company, location, match, salary, status, tone]) => (
-            <article className="opportunity-card" key={String(company)}>
-              <span className={`company-mark large ${tone}`}>{mark}</span>
-              <div className="opportunity-info"><span className="job-status">{status}</span><h2>{role}</h2><p>{company} · {location}</p><div className="tag-row"><span>Full-time</span><span>{salary}</span><span>2–5 yrs</span></div><div className="why-match"><span>✦</span><p><strong>Your strongest edge</strong><small>Your Tracebench project is highly relevant to their LLM evaluation roadmap.</small></p></div></div>
-              <div className="opportunity-score"><ScoreRing value={Number(match)} size="medium" /><strong>{match}% match</strong><span>Skills 97 · Projects 98</span><button className="button button-dark" onClick={() => notify(`Application prepared for ${company}`)}>Prepare application</button><button className="text-button" onClick={() => notify(`${company} role saved`)}>♡ Save for later</button></div>
-            </article>
-          ))}
-        </div>
-        <aside className="match-breakdown panel"><span className="eyebrow">Your match profile</span><h2>What recruiters see</h2>{[["Technical fit", 93],["Project relevance", 96],["Growth trajectory", 88],["Culture signals", 84],["Location & salary", 91]].map(([label, value]) => <div key={String(label)}><span>{label}<b>{value}%</b></span><i><b style={{ width: `${value}%` }} /></i></div>)}<button onClick={() => notify("Profile optimization tips opened")}>Improve my matches →</button></aside>
-      </div>
-    </>
-  );
-}
-
-function CareerRoadmap({ notify }: { notify: (message: string) => void }) {
-  return (
-    <>
-      <PageHeading eyebrow="AI career guidance" title="Your next chapter, mapped." copy="A practical path from AI Product Engineer to AI Tech Lead — personalized to your evidence and market demand." action={<button className="button button-outline">AI Tech Lead ⌄</button>} />
-      <section className="roadmap-hero">
-        <div><span className="dark-eyebrow">Target role readiness</span><strong>68%</strong><p>You&apos;re <b>2–3 focused milestones</b> away from being a strong AI Tech Lead candidate.</p></div>
-        <div className="readiness-arc"><ScoreRing value={68} label="Role-ready" size="large" tone="coral" /></div>
-        <div className="salary-forecast"><span>Predicted salary</span><strong>₹28–36 LPA</strong><small>+42% from current estimate</small><MiniSparkline points={[24, 32, 38, 48, 54, 66, 78, 91]} /></div>
-      </section>
-      <section className="roadmap-timeline">
-        {[
-          ["Now", "Strengthen production LLMOps", "Complete the LLM systems observability path and ship monitoring to Tracebench.", "6–8 weeks", "In progress", 62],
-          ["Next", "Prove technical leadership", "Mentor two contributors and lead an architecture RFC in an active open-source project.", "8–12 weeks", "Recommended", 0],
-          ["Then", "Own a measurable product outcome", "Lead one AI feature from discovery to launch and document adoption, reliability, and revenue impact.", "3–4 months", "High impact", 0],
-          ["Target", "AI Tech Lead ready", "Expected readiness: 91% · projected by February 2027.", "6–8 months", "Milestone", 0],
-        ].map(([phase, title, copy, time, status, progress], index) => (
-          <article className={`roadmap-step step-${index}`} key={String(phase)}>
-            <div className="timeline-marker"><span>{index + 1}</span><i /></div>
-            <div className="step-card"><span className="phase-label">{phase}</span><h2>{title}</h2><p>{copy}</p><div className="step-meta"><span>◷ {time}</span><b>{status}</b></div>{Number(progress) > 0 && <div className="step-progress"><i><b style={{ width: `${progress}%` }} /></i><span>{progress}%</span></div>}{index < 3 && <button onClick={() => notify(`${title} added to your plan`)}>{index === 0 ? "Continue learning" : "Add to my plan"} →</button>}</div>
-            {index < 3 && <aside><span className="eyebrow">{index === 0 ? "Recommended learning" : index === 1 ? "Proof to collect" : "Success measure"}</span><strong>{index === 0 ? "DeepLearning.AI · LLMOps" : index === 1 ? "Merged RFC + mentor feedback" : "Launch metrics + case study"}</strong><small>{index === 0 ? "4.8 ★ · 12 hours · Certificate" : index === 1 ? "+4 Leadership score potential" : "+7 Project quality potential"}</small></aside>}
-          </article>
-        ))}
-      </section>
-    </>
-  );
-}
-
-function ResumeStudio({ notify }: { notify: (message: string) => void }) {
-  const [targeted, setTargeted] = useState(false);
-  return (
-    <>
-      <PageHeading eyebrow="AI resume & portfolio builder" title="Make every application count." copy="Turn your verified evidence into ATS-ready resumes, tailored cover letters, and a dynamic portfolio." action={<button className="button button-dark" onClick={() => notify("New application kit created")}>＋ New application kit</button>} />
-      <section className="studio-grid">
-        <article className="resume-preview panel">
-          <div className="resume-toolbar"><span>AI_Product_Engineer_Ananya.pdf</span><div><button>−</button><b>85%</b><button>＋</button></div></div>
-          <div className="resume-sheet">
-            <header><div><h2>Ananya Verma</h2><p>AI Product Engineer</p></div><span>New Delhi · ananya.dev<br />github.com/ananyav</span></header>
-            <section><h3>PROFESSIONAL SUMMARY</h3><p>AI product engineer building reliable GenAI experiences, with verified expertise in RAG systems, evaluation, and user-centered product delivery.</p></section>
-            <section><h3>EXPERIENCE</h3><div className="resume-line"><strong>AI Product Engineer · Lime Labs</strong><span>2024–Present</span></div><p>Led a retrieval-quality initiative that improved grounded-answer precision by 23% across 1.8M monthly queries.</p></section>
-            <section><h3>SIGNATURE PROJECTS</h3><div className="resume-line"><strong>Tracebench · Open-source RAG evaluation</strong><span>428 ★</span></div><p>Created a production evaluation suite used by 16 engineering teams; authored core scoring and observability modules.</p></section>
-            <section><h3>VERIFIED SKILLS</h3><p>Generative AI · Python · RAG Systems · Product Strategy · React · MLOps</p></section>
-          </div>
-        </article>
-        <aside className="studio-controls">
-          <article className="ats-score-card"><div><span className="dark-eyebrow">ATS strength</span><strong>{targeted ? 96 : 88}</strong><small>{targeted ? "Excellent for target role" : "Strong baseline resume"}</small></div><ScoreRing value={targeted ? 96 : 88} size="medium" /></article>
-          <article className="panel optimize-card"><span className="eyebrow">Company-specific optimization</span><h2>Target a role</h2><label htmlFor="job-description">Paste a job description</label><textarea id="job-description" placeholder="Paste the role here and Proven will tailor your evidence..." /><button className="button button-dark" onClick={() => { setTargeted(true); notify("Resume optimized for target role · ATS score 96"); }}>✦ Optimize with AI</button>{targeted && <div className="optimization-result"><span>✓ 7 evidence points strengthened</span><span>✓ 5 role keywords added naturally</span><span>✓ Summary rewritten for impact</span></div>}</article>
-          <article className="builder-actions panel">{[["▤","Cover letter","Tailored to role & company"],["↗","Portfolio website","Live, dynamic, evidence-backed"],["◎","LinkedIn summary","Optimized for discovery"]].map(([icon,title,copy]) => <button key={title} onClick={() => notify(`${title} draft generated`)}><span>{icon}</span><p><strong>{title}</strong><small>{copy}</small></p><b>→</b></button>)}</article>
-        </aside>
-      </section>
-    </>
-  );
-}
-
-function CandidateModal({
-  candidate,
-  onClose,
-  notify,
-}: {
-  candidate: Candidate;
-  onClose: () => void;
-  notify: (message: string) => void;
-}) {
-  return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={`${candidate.name} verified profile`}>
-      <div className="candidate-modal">
-        <button className="modal-close" onClick={onClose} aria-label="Close profile">×</button>
-        <header>
-          <Avatar candidate={candidate} size="large" />
-          <div><span className="verified-line">✓ Identity & evidence verified</span><h2>{candidate.name}</h2><p>{candidate.role} · {candidate.location}</p><div className="tag-row">{candidate.skills.map(skill => <span key={skill}>{skill}</span>)}</div></div>
-          <div className="modal-match"><ScoreRing value={candidate.match} size="medium" /><strong>{candidate.match}% role match</strong></div>
-        </header>
-        <section className="modal-score-section">
-          <div><span className="eyebrow">Proven Talent Score™</span><strong className="huge-score">{candidate.talent}</strong><small>Top 7% of comparable talent</small></div>
-          <div className="modal-skill-bars">{[["Coding ability",94],["Project quality",92],["Problem solving",89],["Innovation",91],["Leadership",78],["Consistency",87]].map(([label,value]) => <div key={String(label)}><span>{label}<b>{value}</b></span><i><b style={{ width: `${value}%` }} /></i></div>)}</div>
-        </section>
-        <section className="modal-evidence">
-          <div className="modal-section-title"><span className="eyebrow">Why this candidate stands out</span><h3>Evidence, not claims.</h3></div>
-          <div className="modal-evidence-grid">
-            <article><span>⚑</span><small>Hackathon signal</small><strong>{candidate.proof}</strong><p>Top-ranked for innovation and technical feasibility.</p></article>
-            <article><span>GH</span><small>Open-source signal</small><strong>{candidate.activity}</strong><p>Consistent, reviewed contributions across 14 months.</p></article>
-            <article><span>✓</span><small>Trust signal</small><strong>{candidate.authenticity}/100 authenticity</strong><p>No duplicate, plagiarism, or credential risk detected.</p></article>
-          </div>
-        </section>
-        <footer><button className="button button-outline" onClick={() => notify(`${candidate.name}'s report exported`)}>Export evidence report</button><button className="button button-dark" onClick={() => { notify(`${candidate.name} moved to interview`); onClose(); }}>Move to interview →</button></footer>
-      </div>
+  const p=projects[activeProject];
+  return <div className="view-wrap">
+    <section className="page-lead"><div><span className="eyebrow"><Icon name="trophy" size={15}/>HACKATHON-TO-HIRING</span><h2>Discover builders in motion.</h2><p>Turn hackathon projects, team contributions, and GitHub proof into a direct talent pipeline.</p></div><div className="event-chip"><span className="event-mark">LL</span><div><small>Live talent pool</small><strong>Logic Loop 2026</strong></div><span>128 builders</span></div></section>
+    <div className="hackathon-stats"><div><span className="stat-icon blue"><Icon name="trophy"/></span><p>Projects analyzed<strong>32</strong></p><small>100% complete</small></div><div><span className="stat-icon green"><Icon name="people"/></span><p>Recruiter-ready<strong>18</strong></p><small>Score above 80</small></div><div><span className="stat-icon amber"><Icon name="spark"/></span><p>Top innovation<strong>96</strong></p><small>JalDrishti</small></div><div><span className="stat-icon navy"><Icon name="briefcase"/></span><p>Interview invites<strong>11</strong></p><small>Across 6 teams</small></div></div>
+    <div className="hackathon-layout">
+      <section className="content-card leaderboard"><div className="section-heading"><div><p className="kicker">AI PROJECT RANKING</p><h3>Top talent signals</h3></div><button className="mini-filter"><Icon name="search" size={15}/>Filter</button></div>{projects.map((project,i)=><button key={project.name} className={`project-row ${i===activeProject?'active':''}`} onClick={()=>{setActiveProject(i);setInvited(false)}}><span className="rank">0{i+1}</span><span className="project-avatar">{project.initials}</span><span className="project-copy"><strong>{project.name}</strong><small>{project.team} · {project.rank}</small></span><span className="project-score">{project.score}<small>AI score</small></span><Icon name="arrow" size={16}/></button>)}</section>
+      <section className="content-card project-detail"><div className="project-cover"><div><span className="fit-badge">{p.rank}</span><h3>{p.name}</h3><p>{p.team} · Social impact AI</p></div><ScoreRing score={p.score} label="Project score" compact/></div><p className="project-description">{p.desc}</p><div className="project-score-grid"><div><span>Innovation</span><strong>{p.innovation}</strong><div className="bar"><i style={{width:`${p.innovation}%`}}/></div></div><div><span>Feasibility</span><strong>{p.feasibility}</strong><div className="bar"><i style={{width:`${p.feasibility}%`}}/></div></div><div><span>Technical depth</span><strong>92</strong><div className="bar"><i style={{width:'92%'}}/></div></div><div><span>Documentation</span><strong>86</strong><div className="bar"><i style={{width:'86%'}}/></div></div></div><div className="tech-team"><div><h4>Technology evidence</h4><div className="skill-list">{p.stack.map(s=><SkillPill key={s} state="good">{s}</SkillPill>)}</div></div><div><h4>Team contributors</h4><div className="member-stack">{p.members.map((m,i)=><span key={m} style={{zIndex:p.members.length-i}}>{m}</span>)}</div></div></div><div className="project-actions"><button className="ghost-button" onClick={()=>onNavigate("profile")}>View talent profiles</button><button className="primary-button" onClick={()=>setInvited(true)}>{invited ? <><Icon name="check" size={16}/>Invite sent</> : <>Invite top contributors <Icon name="arrow" size={16}/></>}</button></div></section>
     </div>
-  );
+  </div>
+}
+
+function RecruiterView({ onNavigate }: { onNavigate: (view: View) => void }) {
+  const [query,setQuery]=useState(""); const [shortlisted,setShortlisted]=useState<string[]>(["Ananya Verma"]);
+  const filtered=useMemo(()=>candidates.filter(c=>(c.name+c.role+c.location+c.skills.join(' ')).toLowerCase().includes(query.toLowerCase())),[query]);
+  const toggle=(name:string)=>setShortlisted(x=>x.includes(name)?x.filter(n=>n!==name):[...x,name]);
+  return <div className="view-wrap">
+    <section className="page-lead recruiter-lead"><div><span className="eyebrow"><Icon name="people" size={15}/>RECRUITER INTELLIGENCE HUB</span><h2>Decide with the whole signal.</h2><p>Talent profiles, role fit, verified skills, and hackathon proof—finally in one place.</p></div><button className="primary-button" onClick={()=>onNavigate("match")}><Icon name="briefcase" size={17}/>Create job match</button></section>
+    <div className="recruiter-stats"><div><span>Active candidates</span><strong>128</strong><small><b>+18</b> this week</small></div><div><span>High-fit talent</span><strong>34</strong><small>Match score ≥ 85</small></div><div><span>Skills verified</span><strong>76%</strong><small><b>+9%</b> this month</small></div><div><span>Time to shortlist</span><strong>1.8d</strong><small><b>−42%</b> vs manual</small></div></div>
+    <section className="content-card recruiter-table-card"><div className="table-tools"><div><p className="kicker">UNIFIED TALENT PIPELINE</p><h3>Recommended candidates</h3></div><div className="search-shell"><Icon name="search" size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search skill, role, or city"/></div></div><div className="table-wrap"><table><thead><tr><th>Candidate</th><th>Proof</th><th>Role match</th><th>Verified skill</th><th>Talent score</th><th>Decision</th></tr></thead><tbody>{filtered.map(c=><tr key={c.name}><td><div className="table-candidate"><span className="small-avatar">{c.initials}</span><div><strong>{c.name}</strong><small>{c.role} · {c.location}</small><div className="micro-skills">{c.skills.map(s=><span key={s}>{s}</span>)}</div></div></div></td><td><span className="proof-text"><Icon name="github" size={15}/>{c.evidence}</span></td><td><div className="number-cell"><strong>{c.match}%</strong><div className="bar"><i style={{width:`${c.match}%`}}/></div></div></td><td><span className="verified-score"><Icon name="shield" size={15}/>{c.verified}%</span></td><td><strong className="talent-number">{c.score}</strong></td><td><button className={shortlisted.includes(c.name)?"shortlist active":"shortlist"} onClick={()=>toggle(c.name)}>{shortlisted.includes(c.name)?<><Icon name="check" size={14}/>Shortlisted</>:"Shortlist"}</button></td></tr>)}</tbody></table></div><div className="table-footer"><span>Showing {filtered.length} of 128 candidates</span><div><button disabled>Previous</button><button className="current">1</button><button>2</button><button>3</button><button>Next</button></div></div></section>
+    <div className="insight-grid"><section className="content-card"><div className="section-heading"><div><p className="kicker">PIPELINE HEALTH</p><h3>Hiring funnel</h3></div><span>Last 30 days</span></div><div className="funnel"><div style={{width:'100%'}}><span>Sourced</span><strong>128</strong></div><div style={{width:'78%'}}><span>High-fit</span><strong>62</strong></div><div style={{width:'58%'}}><span>Verified</span><strong>41</strong></div><div style={{width:'42%'}}><span>Shortlisted</span><strong>24</strong></div></div></section><section className="content-card recruiter-insight"><span className="insight-icon"><Icon name="spark"/></span><div><p className="kicker">NOVA’S INSIGHT</p><h3>Your strongest hidden talent pool</h3><p>Hackathon participants are converting to shortlist at <strong>2.4×</strong> the rate of resume-only applicants. Explore 7 high-fit builders not yet reviewed.</p><button className="text-button" onClick={()=>onNavigate("hackathon")}>Explore hackathon talent <Icon name="arrow" size={15}/></button></div></section></div>
+  </div>
 }
 
 export default function Home() {
-  const [role, setRole] = useState<Role>("recruiter");
-  const [view, setView] = useState("overview");
-  const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
-  const [saved, setSaved] = useState<number[]>([2]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [toast, setToast] = useState("");
-  const [mobileNav, setMobileNav] = useState(false);
-
-  const nav = role === "recruiter" ? recruiterNav : candidateNav;
-  const title = useMemo(() => nav.find((item) => item[0] === view)?.[2] || "Overview", [nav, view]);
-
-  function notify(message: string) {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 2800);
-  }
-
-  function changeRole(nextRole: Role) {
-    setRole(nextRole);
-    setView("overview");
-    setMobileNav(false);
-  }
-
-  function navigate(nextView: string) {
-    setView(nextView);
-    setMobileNav(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function runSearch(query: string) {
-    setSearchQuery(query);
-    navigate("discover");
-  }
-
-  function toggleSaved(id: number) {
-    setSaved((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
-    notify(saved.includes(id) ? "Removed from shortlist" : "Added to shortlist");
-  }
-
-  function renderView() {
-    if (role === "candidate") {
-      switch (view) {
-        case "profile": return <TalentIdentity />;
-        case "opportunities": return <Opportunities notify={notify} />;
-        case "roadmap": return <CareerRoadmap notify={notify} />;
-        case "resume": return <ResumeStudio notify={notify} />;
-        case "assessments": return <Assessments notify={notify} candidateMode />;
-        default: return <CandidateOverview onNavigate={navigate} notify={notify} />;
-      }
-    }
-    switch (view) {
-      case "discover": return <TalentDiscovery initialQuery={searchQuery} onCandidate={setSelectedCandidate} saved={saved} toggleSaved={toggleSaved} notify={notify} />;
-      case "pipeline": return <HiringPipeline notify={notify} />;
-      case "assessments": return <Assessments notify={notify} />;
-      case "hackathons": return <Hackathons notify={notify} />;
-      case "pitch": return <PitchAnalyzer notify={notify} />;
-      case "analytics": return <HiringAnalytics />;
-      default: return <RecruiterOverview onNavigate={navigate} onCandidate={setSelectedCandidate} onSearch={runSearch} saved={saved} toggleSaved={toggleSaved} />;
-    }
-  }
-
-  return (
-    <div className={`app-shell role-${role}`}>
-      <aside className={`sidebar ${mobileNav ? "mobile-open" : ""}`}>
-        <div className="brand" onClick={() => navigate("overview")} role="button" tabIndex={0}>
-          <span className="brand-mark">P<span>•</span></span>
-          <div><strong>PROVEN</strong><small>Talent intelligence</small></div>
-        </div>
-        <div className="workspace-switcher">
-          <button className={role === "recruiter" ? "active" : ""} onClick={() => changeRole("recruiter")}>Recruiter</button>
-          <button className={role === "candidate" ? "active" : ""} onClick={() => changeRole("candidate")}>Candidate</button>
-        </div>
-        <nav aria-label={`${role} navigation`}>
-          <span className="nav-label">{role === "recruiter" ? "Workspace" : "My career"}</span>
-          {nav.map(([id, icon, label]) => (
-            <button key={id} className={view === id ? "active" : ""} onClick={() => navigate(id)}>
-              <span>{icon}</span>{label}
-              {id === "discover" && role === "recruiter" && <b>238</b>}
-              {id === "opportunities" && role === "candidate" && <b>36</b>}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="trust-mini"><span>✓</span><p><strong>Trust engine active</strong><small>12,480 profiles monitored</small></p></div>
-          <button><span>?</span> Help & resources</button>
-          <button><span>⚙</span> Settings</button>
-          <div className="user-mini">
-            <span className={role === "recruiter" ? "avatar-arjun" : "avatar-ananya"}>{role === "recruiter" ? "AK" : "AV"}</span>
-            <p><strong>{role === "recruiter" ? "Arjun Khanna" : "Ananya Verma"}</strong><small>{role === "recruiter" ? "Nexora Labs" : "AI Product Engineer"}</small></p>
-            <button aria-label="User menu">⋯</button>
-          </div>
-        </div>
-      </aside>
-
-      <main className="main-shell">
-        <header className="topbar">
-          <button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)} aria-label="Toggle navigation">☰</button>
-          <div className="breadcrumb"><span>Proven</span><b>/</b><strong>{title}</strong></div>
-          <button className="global-search" onClick={() => role === "recruiter" ? navigate("discover") : navigate("opportunities")}>
-            <span>⌕</span><span>{role === "recruiter" ? "Ask Proven or search talent..." : "Search jobs, skills, or companies..."}</span><kbd>⌘ K</kbd>
-          </button>
-          <div className="top-actions">
-            <span className="system-status"><i /> All systems live</span>
-            <button aria-label="Notifications">♢<b>3</b></button>
-            <button aria-label="Open AI copilot" className="spark-button" onClick={() => role === "recruiter" ? navigate("discover") : navigate("roadmap")}>✦</button>
-          </div>
-        </header>
-        <div className="page-content">{renderView()}</div>
-      </main>
-      {mobileNav && <button className="mobile-scrim" onClick={() => setMobileNav(false)} aria-label="Close navigation" />}
-      {selectedCandidate && <CandidateModal candidate={selectedCandidate} onClose={() => setSelectedCandidate(null)} notify={notify} />}
-      {toast && <div className="toast"><span>✓</span>{toast}</div>}
-    </div>
-  );
+  const [active, setActive] = useState<View>("profile");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const activeNav = navItems.find(item=>item.id===active)!;
+  useEffect(()=>{window.scrollTo({top:0,behavior:'smooth'})},[active]);
+  const navigate=(view:View)=>{setActive(view);setMenuOpen(false)};
+  return <main className="app-shell">
+    <aside className={`sidebar ${menuOpen?'open':''}`}>
+      <div className="brand"><span className="brand-mark"><Icon name="spark" size={19}/></span><div><strong>SkillNova</strong><small>Talent intelligence</small></div><button className="icon-button close-menu" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"><Icon name="close"/></button></div>
+      <nav aria-label="Product navigation"><p className="nav-label">WORKSPACE</p>{navItems.map(item=><button key={item.id} className={active===item.id?'active':''} onClick={()=>navigate(item.id)}><span className="nav-icon"><Icon name={item.icon}/></span><span><small>{item.eyebrow}</small>{item.label}</span>{active===item.id&&<i/>}</button>)}</nav>
+      <div className="sidebar-flow"><p>One connected signal</p><div><span className="done"><Icon name="check" size={11}/></span><i/><span className={active==='profile'?'current':'done'}>{active==='profile'?'1':<Icon name="check" size={11}/>}</span><i/><span className={['verify','hackathon','recruiter'].includes(active)?'done':active==='match'?'current':''}>{['verify','hackathon','recruiter'].includes(active)?<Icon name="check" size={11}/>:active==='match'?'2':'3'}</span><i/><span className={active==='recruiter'?'current':''}>{active==='recruiter'?'5':'4'}</span></div><small>Evidence → match → verify → hire</small></div>
+      <div className="sidebar-user"><span className="small-avatar">DP</span><div><strong>Darshan</strong><small>Recruiter workspace</small></div><span className="online-dot"/></div>
+    </aside>
+    {menuOpen&&<button className="sidebar-overlay" onClick={()=>setMenuOpen(false)} aria-label="Close navigation overlay"/>}
+    <section className="main-stage">
+      <AppHeader title={activeNav.label} subtitle={activeNav.eyebrow} onMenu={()=>setMenuOpen(true)}/>
+      {active==="profile"&&<ProfileView onNavigate={navigate}/>} {active==="match"&&<MatchView onNavigate={navigate}/>} {active==="verify"&&<VerifyView onNavigate={navigate}/>} {active==="hackathon"&&<HackathonView onNavigate={navigate}/>} {active==="recruiter"&&<RecruiterView onNavigate={navigate}/>} 
+      <footer><span><strong>SkillNova</strong> · Proof over paperwork.</span><span>AI Talent Intelligence Platform · Logic Loop 2026</span></footer>
+    </section>
+  </main>;
 }

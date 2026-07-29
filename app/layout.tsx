@@ -1,55 +1,30 @@
 import type { Metadata } from "next";
-import { DM_Sans, Manrope } from "next/font/google";
+import { DM_Sans, DM_Serif_Display } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-});
-
-const manrope = Manrope({
-  variable: "--font-manrope",
-  subsets: ["latin"],
-});
+const dmSans = DM_Sans({ variable: "--font-sans", subsets: ["latin"] });
+const dmSerif = DM_Serif_Display({ variable: "--font-serif", subsets: ["latin"], weight: "400" });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host");
-  const protocol = requestHeaders.get("x-forwarded-proto") || (host?.includes("localhost") ? "http" : "https");
-  const origin = host ? `${protocol}://${host}` : "https://proven.example";
-  const title = "Proven — Talent Intelligence";
-  const description =
-    "Hire from verified skills, real contributions, and demonstrated technical excellence.";
-
+  const incoming = await headers();
+  const host = incoming.get("x-forwarded-host") ?? incoming.get("host") ?? "localhost:3000";
+  const protocol = incoming.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
+  const origin = `${protocol}://${host}`;
   return {
-    title,
-    description,
+    metadataBase: new URL(origin),
+    title: "SkillNova — AI Talent Intelligence",
+    description: "Turn resumes, GitHub evidence, verified skills, and hackathon work into trusted hiring decisions.",
     openGraph: {
-      title,
-      description,
+      title: "SkillNova — Proof over paperwork.",
+      description: "AI talent intelligence built on real evidence, not just resumes.",
       type: "website",
-      images: [{ url: `${origin}/og.png`, width: 1773, height: 924, alt: "Proven — Hire what they've proven." }],
+      images: [{ url: `${origin}/og.png`, width: 1731, height: 909, alt: "SkillNova AI Talent Intelligence" }],
     },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-      images: [`${origin}/og.png`],
-    },
+    twitter: { card: "summary_large_image", title: "SkillNova — Proof over paperwork.", description: "AI talent intelligence built on real evidence.", images: [`${origin}/og.png`] },
   };
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  return (
-    <html lang="en">
-      <body className={`${dmSans.variable} ${manrope.variable}`}>
-        {children}
-      </body>
-    </html>
-  );
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return <html lang="en"><body className={`${dmSans.variable} ${dmSerif.variable}`}>{children}</body></html>;
 }
