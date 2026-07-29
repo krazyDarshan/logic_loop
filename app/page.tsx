@@ -152,7 +152,16 @@ function ProfileView({ onNavigate }: { onNavigate: (view: View) => void }) {
     <div className="view-wrap profile-start">
       <section className="hero-intro">
         <div className="hero-copy"><span className="eyebrow"><Icon name="spark" size={15}/>AI TALENT PROFILE ENGINE</span><h2>Turn scattered proof into one <em>trusted talent profile.</em></h2><p>SkillNova reads the resume, inspects public GitHub work, and connects every claim to real evidence—so recruiters see capability, not just keywords.</p><div className="hero-proof"><span><Icon name="shield" size={17}/>Evidence-linked scoring</span><span><Icon name="bolt" size={17}/>Results in seconds</span><span><Icon name="github" size={17}/>Live repository signals</span></div></div>
-        <div className="metric-cluster"><div className="metric-card main"><span>Talent Score</span><strong>92<small>/100</small></strong><div className="mini-bars"><i/><i/><i/><i/><i/></div><p>Projected from verified evidence</p></div><div className="floating-metric one"><span className="metric-icon"><Icon name="github" size={18}/></span><div><strong>12 repos</strong><small>Analyzed</small></div><Icon name="check" size={16}/></div><div className="floating-metric two"><span className="metric-icon blue"><Icon name="code" size={18}/></span><div><strong>8 skills</strong><small>Evidence-backed</small></div><Icon name="check" size={16}/></div></div>
+        <div className="evidence-board">
+          <div className="evidence-board-head"><div><span>Candidate evidence</span><strong>Unified profile signal</strong></div><span className="evidence-ready"><i/>Analysis ready</span></div>
+          <div className="evidence-score"><strong>92</strong><div><span>Talent Score</span><small>High confidence · Top 8%</small></div></div>
+          <div className="evidence-metrics">
+            <div><span><Icon name="github" size={17}/>GitHub repositories</span><strong>12 <Icon name="check" size={14}/></strong></div>
+            <div><span><Icon name="code" size={17}/>Evidence-backed skills</span><strong>8 <Icon name="check" size={14}/></strong></div>
+            <div><span><Icon name="trophy" size={17}/>Hackathon projects</span><strong>3 <Icon name="check" size={14}/></strong></div>
+          </div>
+          <div className="evidence-board-foot"><Icon name="shield" size={16}/>Every score links back to candidate evidence</div>
+        </div>
       </section>
 
       <section className="analysis-workbench">
