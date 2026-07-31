@@ -90,11 +90,11 @@ def fetch_contribution_stats(username: str) -> Dict[str, Any]:
 def analyze_github_profile(username: str, job_role: Optional[str] = None, keywords: Optional[List[str]] = None) -> Dict[str, Any]:
     # ---- Fetch all data in parallel-ish fashion ----
     profile = fetch_github_profile(username)
+    if not profile:
+        return {"error": f"GitHub user '{username}' does not exist or API limit reached."}
+        
     repos = fetch_github_repos(username, per_page=30)
     contributions = fetch_contribution_stats(username)
-    
-    if not repos and not profile:
-        return {"error": "Could not fetch GitHub data. User may not exist or has no public activity."}
     
     # ---- Build rich repo summaries (top 15 for token efficiency) ----
     repo_summaries = []
@@ -206,7 +206,14 @@ Perform a thorough evaluation and return the output strictly as a JSON object wi
   "job_role_match_reason": "Why they match or don't match the role",
   "keyword_match_score": 0-100,
   "keyword_matches": {{}},
-  "github_total_score": 0-100
+  "github_total_score": 0-100,
+  "confidence_score": 0-100,
+  "citations": [
+    {{
+      "claim": "A specific claim made in the evaluation (e.g. 'Highly active in open source')",
+      "evidence": "An exact detail from the provided stats or repo list proving the claim"
+    }}
+  ]
 }}
 
 IMPORTANT scoring rules:
@@ -218,6 +225,8 @@ IMPORTANT scoring rules:
 - "job_role_match_score": Fit for the target role (0-100). If no role specified, default to 50.
 - "keyword_match_score": How many recruiter keywords are present (0-100). If none specified, default to 50.
 - "github_total_score": Weighted average = (quality_score * 0.25) + (consistency_score * 0.20) + (documentation_score * 0.10) + (originality_score * 0.15) + (community_engagement_score * 0.10) + (job_role_match_score * 0.15) + (keyword_match_score * 0.05). Round to nearest integer.
+- "confidence_score": Your confidence in this evaluation (0-100). Reduce if there is very little public data or repos.
+- "citations": Provide at least 3 citations proving your evaluation. Evidence must strictly reference data provided in the prompt.
 """
     
     try:

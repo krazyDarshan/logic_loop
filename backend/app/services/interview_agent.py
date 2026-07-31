@@ -151,17 +151,20 @@ Return the output strictly as a JSON object with this schema:
       "question": "The question",
       "candidate_answer": "What they answered",
       "score": 0-10,
-      "feedback": "Brief feedback on their answer",
+      "feedback": "Detailed feedback on what was correct, what was missing, and how it could be improved.",
       "topic": "Topic area"
     }}
   ],
-  "objective_total_score": 0-100
+  "objective_total_score": 0-100,
+  "evaluation_confidence_score": 0-100,
+  "evaluation_rationale": "An overall summary explaining why the candidate received the objective_total_score, citing specific strengths or gaps in their answers."
 }}
 
 Scoring rules:
 - Each question is scored 0-10 (10 = perfect, 0 = completely wrong/blank).
 - "objective_total_score" = sum of all individual scores * 2 (to scale to 0-100).
 - Be fair but strict. Partial credit is fine for partially correct answers.
+- "evaluation_confidence_score": How confident are you in this grading? (0-100). Reduce if the candidate's answers were highly ambiguous.
 """
 
     try:
