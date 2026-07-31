@@ -1,0 +1,47 @@
+#Requirement for the AI JobMatchMaking 
+1.pypdf>=4.0.0
+scikit-learn>=1.3.0
+torch>=2.0.0.
+
+2. How to install & run in VS Code
+Step-by-step
+
+Open the folder that contains your script in VS Code.
+Create a virtual environment (recommended):
+Press Ctrl + Shift + P → type Python: Create Environment → choose Venv.
+Select your Python interpreter.
+
+Open the integrated terminal in VS Code (Ctrl + ``  or View → Terminal).
+Install the packages:Bashpip install -r requirements.txtOr install them one by one:Bashpip install pypdf sentence-transformers scikit-learn torch
+Run the script:
+With file arguments:Bashpython your_script_name.py --cv path/to/resume.pdf --jd path/to/job_description.txt
+Interactive mode:Bashpython your_script_name.py
+
+
+#Requirement for Hiring to hackathon
+
+pip installthe following :
+1.pip install pypdf sentence-transformers psycopg2-binary google-genai
+2.connect the database and also add an example 
+3. How to Run the Pipeline
+Step 1: Set Your Gemini API Key
+Set your environment variable in your terminal:
+if command prompt use the following one:set GEMINI_API_KEY=your_actual_gemini_api_key_here
+if powershell use the following one:$env:GEMINI_API_KEY="your_actual_gemini_api_key_here"
+
+4.Step 2: Update Database Credentials
+Open hackathon_pipeline.py and set your local PostgreSQL credentials in DB_CONFIG:
+
+Python
+DB_CONFIG = {
+    "dbname": "your_db_name",
+    "user": "postgres",
+    "password": "your_password",
+    "host": "localhost",
+    "port": 5432,
+
+    5. Run the Script
+Execute the Python script:
+
+Bash
+python hackathon_pipeline.py
