@@ -14,12 +14,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(origin),
     title: "SkillNova — AI Talent Intelligence",
-    description: "Turn resumes, GitHub evidence, verified skills, and hackathon work into trusted hiring decisions.",
+    description: "Secure candidate and recruiter workspaces for verified talent profiles, explainable job matches, skill gaps, and evidence-led hiring.",
     openGraph: {
       title: "SkillNova — Proof over paperwork.",
-      description: "AI talent intelligence built on real evidence, not just resumes.",
+      description: "Candidate profiles, ranked job matches, skill verification, and recruiter intelligence built on real evidence.",
       type: "website",
-      images: [{ url: `${origin}/og.png`, width: 1732, height: 908, alt: "SkillNova AI Talent Intelligence" }],
+      images: [{ url: `${origin}/og.png`, width: 1731, height: 909, alt: "SkillNova AI Talent Intelligence" }],
     },
     twitter: { card: "summary_large_image", title: "SkillNova — Proof over paperwork.", description: "AI talent intelligence built on real evidence.", images: [`${origin}/og.png`] },
   };

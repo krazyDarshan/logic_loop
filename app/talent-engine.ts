@@ -73,6 +73,9 @@ export type Candidate = CandidateBase & { score: TalentScore };
 
 export type JobMatch = {
   total: number;
+  modelFit: number;
+  semanticRelevance: number;
+  skillCoverage: number;
   skillSimilarity: number;
   projectRelevance: number;
   experienceFit: number;
@@ -204,21 +207,26 @@ export function calculateJobMatch(candidate: Candidate, description: string): Jo
   const matchedSkills = requiredSkills.filter((name) => candidateSkills.has(name.toLowerCase()));
   const missingSkills = requiredSkills.filter((name) => !candidateSkills.has(name.toLowerCase()));
   const matchedLevels = matchedSkills.map((name) => candidateSkills.get(name.toLowerCase())?.level ?? 0);
-  const skillCoverage = requiredSkills.length ? matchedSkills.length / requiredSkills.length : 0.72;
+  const skillCoverageRatio = requiredSkills.length ? matchedSkills.length / requiredSkills.length : 0.72;
+  const skillCoverage = clamp(skillCoverageRatio * 100);
   const skillDepth = matchedLevels.length ? average(matchedLevels) : average(candidate.skills.slice(0, 4).map((item) => item.level));
-  const skillSimilarity = clamp(skillCoverage * 72 + skillDepth * 0.28);
+  const projectText = `${candidate.summary} ${candidate.hackathons.project} ${candidate.github.languages.join(" ")} ${candidate.skills.map((item) => item.name).join(" ")}`.toLowerCase();
+  const meaningfulTokens = description.toLowerCase().split(/[^a-z0-9+#.]+/).filter((token) => token.length > 3);
+  const overlap = new Set(meaningfulTokens.filter((token) => projectText.includes(token))).size;
+  const tokenCoverage = meaningfulTokens.length ? (overlap / new Set(meaningfulTokens).size) * 100 : 60;
+  const semanticRelevance = clamp(tokenCoverage * 0.45 + skillDepth * 0.3 + candidate.score.dimensions.projectQuality * 0.25);
+  // Mirrors the MODELS branch: semantic relevance contributes 60%, explicit skill coverage 40%.
+  const modelFit = clamp(semanticRelevance * 0.6 + skillCoverage * 0.4);
+  const skillSimilarity = clamp(modelFit * 0.72 + skillDepth * 0.28);
 
   const yearsMatch = description.toLowerCase().match(/(\d{1,2})\+?\s*(?:years?|yrs?)/);
   const requiredYears = yearsMatch ? Number(yearsMatch[1]) : Math.max(1, candidate.experience - 1);
   const experienceFit = clamp((candidate.experience / requiredYears) * 88 + (candidate.experience >= requiredYears ? 10 : 0));
-  const projectText = `${candidate.summary} ${candidate.hackathons.project} ${candidate.github.languages.join(" ")} ${candidate.skills.map((item) => item.name).join(" ")}`.toLowerCase();
-  const meaningfulTokens = description.toLowerCase().split(/[^a-z0-9+#.]+/).filter((token) => token.length > 3);
-  const overlap = new Set(meaningfulTokens.filter((token) => projectText.includes(token))).size;
   const projectRelevance = clamp(58 + Math.min(overlap * 4, 28) + candidate.score.dimensions.projectQuality * 0.14);
   const evidenceConfidence = clamp(candidate.score.confidence * 0.72 + candidate.trust.resumeConsistency * 0.28);
   const total = clamp(skillSimilarity * 0.45 + projectRelevance * 0.25 + experienceFit * 0.2 + evidenceConfidence * 0.1);
   const explanation = total >= 90 ? "Exceptional fit with strong verified evidence across the role's core requirements." : total >= 80 ? "Strong fit; validate the few missing requirements during the interview." : total >= 70 ? "Promising fit with clear upskilling areas." : "Partial fit; consider adjacent roles or a focused technical screen.";
-  return { total, skillSimilarity, projectRelevance, experienceFit, evidenceConfidence, matchedSkills, missingSkills, requiredSkills, explanation };
+  return { total, modelFit, semanticRelevance, skillCoverage, skillSimilarity, projectRelevance, experienceFit, evidenceConfidence, matchedSkills, missingSkills, requiredSkills, explanation };
 }
 
 export function mergeLiveCandidate(base: Candidate, resume: ResumeSignals | null, github: CandidateBase["github"], name?: string): Candidate {
@@ -226,7 +234,18 @@ export function mergeLiveCandidate(base: Candidate, resume: ResumeSignals | null
   const existing = new Map(base.skills.map((item) => [item.name, item]));
   for (const language of github.languages) {
     const catalogName = Object.keys(skillCatalog).find((name) => name.toLowerCase() === language.toLowerCase());
-    if (catalogName && !existing.has(catalogName)) existing.set(catalogName, skill(catalogName, 76, true, ["GitHub language evidence"]));
+    if (!catalogName) continue;
+    const previous = existing.get(catalogName);
+    if (previous) {
+      existing.set(catalogName, {
+        ...previous,
+        level: Math.max(previous.level, 76),
+        verified: true,
+        sources: [...new Set([...previous.sources, "GitHub language evidence"])],
+      });
+    } else {
+      existing.set(catalogName, skill(catalogName, 76, true, ["GitHub language evidence"]));
+    }
   }
   for (const detected of detectedSkills) {
     const previous = existing.get(detected);
