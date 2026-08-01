@@ -86,6 +86,28 @@ export type JobMatch = {
   explanation: string;
 };
 
+export type JobOpening = {
+  id: string;
+  company: string;
+  title: string;
+  location: string;
+  mode: string;
+  salary: string;
+  description: string;
+};
+
+export type JobApplication = {
+  id: string;
+  job_id: string;
+  candidate_id: string;
+  resume_url: string;
+  github_link: string;
+  status: string;
+  match_score: number;
+  created_at: string;
+  candidate?: CandidateBase;
+};
+
 export type ResumeSignals = {
   skills: string[];
   experience: number;

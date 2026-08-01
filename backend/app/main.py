@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import analyze, candidates, interview, matchmaker, hackathon
+from app.api.routes import analyze, candidates, interview, matchmaker, hackathon, jobs
 from app.db.database import engine, Base
 
 try:
@@ -23,6 +23,7 @@ app.include_router(candidates.router, prefix="/api/candidates", tags=["candidate
 app.include_router(interview.router, prefix="/api/interview", tags=["interview"])
 app.include_router(matchmaker.router, prefix="/api/matchmaker", tags=["matchmaker"])
 app.include_router(hackathon.router, prefix="/api/hackathon", tags=["hackathon"])
+app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 
 @app.get("/")
 def read_root():
