@@ -641,6 +641,17 @@ body{background:#f7f9fb}
   box-shadow:0 12px 28px #29475d1a;
 }
 
+.header-title-group,
+.candidate-title-group{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:14px;
+}
+
+.header-title-group>div,
+.candidate-title-group>div{min-width:0}
+
 /* Input, upload, navigation, and table polish */
 .input-shell,
 .text-input,
@@ -777,6 +788,27 @@ body{background:#f7f9fb}
   .candidate-page-lead{animation-duration:460ms}
   :where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button){min-height:42px;padding-right:13px}
   :where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button).floating{top:12px;left:12px}
+}
+
+@media(max-width:540px){
+  :where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button){
+    width:38px;
+    min-width:38px;
+    min-height:38px;
+    padding:0;
+    gap:0;
+    overflow:hidden;
+    color:transparent;
+    font-size:0;
+  }
+
+  :where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button)::before{
+    width:26px;
+    height:26px;
+  }
+
+  .header-title-group,
+  .candidate-title-group{gap:9px}
 }
 
 /* Respect operating-system accessibility settings. */

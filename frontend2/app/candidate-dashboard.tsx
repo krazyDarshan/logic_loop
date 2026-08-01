@@ -19,6 +19,15 @@ import {
 
 type CandidateView = "overview" | "matches" | "gaps" | "verification" | "exports";
 
+const fallbackJobs: JobOpening[] = [
+  { id:"nimbus-ai",company:"Nimbus AI",title:"AI Product Engineer",location:"Bengaluru",mode:"Hybrid",salary:"₹18–26 LPA",description:"AI Product Engineer with 2+ years of experience building Python, React, FastAPI, LangGraph, PostgreSQL and Docker products. Strong GenAI, RAG, testing and cross-functional product delivery." },
+  { id:"orbit-stack",company:"OrbitStack",title:"Full-stack Engineer",location:"Remote — India",mode:"Remote",salary:"₹16–23 LPA",description:"Full-stack Engineer with 2+ years of experience using TypeScript, React, Next.js, Node.js, PostgreSQL, AWS and CI/CD. Build accessible, tested customer-facing applications." },
+  { id:"vertex-labs",company:"Vertex Labs",title:"Machine Learning Engineer",location:"Delhi",mode:"Hybrid",salary:"₹20–29 LPA",description:"Machine Learning Engineer with 3+ years of experience in Python, PyTorch, MLOps, FastAPI, Docker and AWS. Own model evaluation, deployment and observability." },
+  { id:"civic-tech",company:"CivicTech Studio",title:"Generative AI Engineer",location:"Pune",mode:"Hybrid",salary:"₹17–25 LPA",description:"Generative AI Engineer with Python, GenAI, RAG, LangGraph, FastAPI, PostgreSQL and React. Experience building grounded assistants and evaluation workflows." },
+  { id:"dataforge",company:"DataForge",title:"Backend Platform Engineer",location:"Mumbai",mode:"On-site",salary:"₹15–22 LPA",description:"Backend Platform Engineer with 3+ years using Python, FastAPI, PostgreSQL, Redis, Docker, AWS and system design. Strong API testing and documentation." },
+  { id:"cloudtrail",company:"CloudTrail Systems",title:"Cloud & DevOps Engineer",location:"Gurugram",mode:"Hybrid",salary:"₹17–27 LPA",description:"Cloud and DevOps Engineer with AWS, Kubernetes, Docker, CI/CD, Linux, Python and Terraform experience. Operate reliable delivery platforms." },
+];
+
 
 
 const navItems: { id: CandidateView; label: string; eyebrow: string }[] = [
@@ -128,7 +137,7 @@ function downloadPortfolio(candidate: Candidate) {
 export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
   const [active,setActive]=useState<CandidateView>("overview");
   const [candidate,setCandidate]=useState<Candidate>(()=>buildCandidate(profile));
-  const [jobs, setJobs] = useState<JobOpening[]>([]);
+  const [jobs, setJobs] = useState<JobOpening[]>(fallbackJobs);
   const [applyModalOpen, setApplyModalOpen] = useState(false);
   const [resumeUrl, setResumeUrl] = useState("");
   const [githubLink, setGithubLink] = useState("");
@@ -152,8 +161,7 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
     fetch("http://localhost:8000/api/jobs/")
       .then(res => res.json())
       .then(data => {
-        if (Array.isArray(data)) setJobs(data);
-        else console.error("Failed to fetch jobs:", data);
+        if (Array.isArray(data) && data.length) setJobs(data as JobOpening[]);
       })
       .catch(err => console.log("Failed to fetch jobs", err));
   }, [profile.userId]);
@@ -164,11 +172,11 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
   const [githubConnected,setGithubConnected]=useState(false);
   const [syncing,setSyncing]=useState(false);
   const [message,setMessage]=useState("Add real evidence to replace onboarding claims with verified signals.");
-  const rankedJobs = useMemo(() => jobs.map((job) => ({job, match: calculateJobMatch(candidate, job.description || "")})).sort((a, b) => b.match.total - a.match.total), [candidate, jobs]);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const selectedJob = rankedJobs.find((item) => item.job.id === selectedJobId) || rankedJobs[0];
-  const topMatch = rankedJobs[0]?.match || { total: 0, skillCoverage: 0, semanticRelevance: 0, modelFit: 0, skillSimilarity: 0, projectRelevance: 0, experienceFit: 0, evidenceConfidence: 0, matchedSkills: [], missingSkills: [], requiredSkills: [], explanation: "" };
-  const blend = calculateEvidenceBlend(candidate, topMatch);
+  const rankedJobs=useMemo(()=>jobs.map((job)=>({job,match:calculateJobMatch(candidate,job.description)})).sort((a,b)=>b.match.total-a.match.total),[candidate,jobs]);
+  const [selectedJobId,setSelectedJobId]=useState(jobs[0].id);
+  const selectedJob=rankedJobs.find((item)=>item.job.id===selectedJobId) || rankedJobs[0];
+  const topMatch=rankedJobs[0].match;
+  const blend=calculateEvidenceBlend(candidate,topMatch);
   const authenticity=getAuthenticityScore(candidate);
   const verifiedSkills=candidate.skills.filter((skill)=>skill.verified);
   const verificationProgress=Math.round(([true,resumeConnected,githubConnected,verifiedSkills.length>=3].filter(Boolean).length/4)*100);
@@ -347,7 +355,7 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
       <div className="candidate-sidebar-foot"><div><span>Profile strength</span><strong>{verificationProgress}%</strong></div><div className="candidate-bar"><i style={{width:`${verificationProgress}%`}}/></div><a href="/signout-with-chatgpt?return_to=/">Sign out</a></div>
     </aside>
     <section className="candidate-main">
-      <header className="candidate-topbar"><div><p>{navItems.find((item)=>item.id===active)?.eyebrow}</p><h1>{navItems.find((item)=>item.id===active)?.label}</h1></div><div className="candidate-top-actions"><span><i/>AI scoring live</span><button onClick={()=>setActive("verification")}>{initials}</button></div></header>
+      <header className="candidate-topbar"><div className="candidate-title-group"><button type="button" className="candidate-back-button" aria-label="Back">Back</button><div><p>{navItems.find((item)=>item.id===active)?.eyebrow}</p><h1>{navItems.find((item)=>item.id===active)?.label}</h1></div></div><div className="candidate-top-actions"><span><i/>AI scoring live</span><button onClick={()=>setActive("verification")}>{initials}</button></div></header>
 
       {active==="overview"&&<div className="candidate-page">
         <section className="candidate-hero"><div className="candidate-hero-copy"><span className="candidate-eyebrow">YOUR VERIFIED TALENT IDENTITY</span><h2>See what your evidence says about you.</h2><p>Your score is recalculated from resume signals, public GitHub work, project quality, consistency and verification—not from profile keywords alone.</p><div className="candidate-hero-actions"><button className="candidate-primary" onClick={()=>setActive("matches")}>Explore {rankedJobs.length} job matches</button><button className="candidate-secondary" onClick={()=>setActive("exports")}>Export profile</button></div></div><div className="candidate-score-panel"><ScoreRing score={candidate.score.total} label="Talent score"/><div><span>{candidate.score.confidence}% confidence</span><span>{candidate.score.evidenceCount} evidence signals</span><span>{authenticity}/100 authenticity</span></div></div></section>
