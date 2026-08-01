@@ -151,7 +151,10 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
 
     fetch("http://localhost:8000/api/jobs/")
       .then(res => res.json())
-      .then(data => setJobs(data))
+      .then(data => {
+        if (Array.isArray(data)) setJobs(data);
+        else console.error("Failed to fetch jobs:", data);
+      })
       .catch(err => console.log("Failed to fetch jobs", err));
   }, [profile.userId]);
 
@@ -161,11 +164,11 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
   const [githubConnected,setGithubConnected]=useState(false);
   const [syncing,setSyncing]=useState(false);
   const [message,setMessage]=useState("Add real evidence to replace onboarding claims with verified signals.");
-  const rankedJobs=useMemo(()=>jobs.map((job)=>({job,match:calculateJobMatch(candidate,job.description)})).sort((a,b)=>b.match.total-a.match.total),[candidate]);
-  const [selectedJobId,setSelectedJobId]=useState(jobs[0].id);
-  const selectedJob=rankedJobs.find((item)=>item.job.id===selectedJobId) || rankedJobs[0];
-  const topMatch=rankedJobs[0].match;
-  const blend=calculateEvidenceBlend(candidate,topMatch);
+  const rankedJobs = useMemo(() => jobs.map((job) => ({job, match: calculateJobMatch(candidate, job.description || "")})).sort((a, b) => b.match.total - a.match.total), [candidate, jobs]);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const selectedJob = rankedJobs.find((item) => item.job.id === selectedJobId) || rankedJobs[0];
+  const topMatch = rankedJobs[0]?.match || { total: 0, skillCoverage: 0, semanticRelevance: 0, modelFit: 0, skillSimilarity: 0, projectRelevance: 0, experienceFit: 0, evidenceConfidence: 0, matchedSkills: [], missingSkills: [], requiredSkills: [], explanation: "" };
+  const blend = calculateEvidenceBlend(candidate, topMatch);
   const authenticity=getAuthenticityScore(candidate);
   const verifiedSkills=candidate.skills.filter((skill)=>skill.verified);
   const verificationProgress=Math.round(([true,resumeConnected,githubConnected,verifiedSkills.length>=3].filter(Boolean).length/4)*100);
@@ -348,7 +351,7 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
 
       {active==="overview"&&<div className="candidate-page">
         <section className="candidate-hero"><div className="candidate-hero-copy"><span className="candidate-eyebrow">YOUR VERIFIED TALENT IDENTITY</span><h2>See what your evidence says about you.</h2><p>Your score is recalculated from resume signals, public GitHub work, project quality, consistency and verification—not from profile keywords alone.</p><div className="candidate-hero-actions"><button className="candidate-primary" onClick={()=>setActive("matches")}>Explore {rankedJobs.length} job matches</button><button className="candidate-secondary" onClick={()=>setActive("exports")}>Export profile</button></div></div><div className="candidate-score-panel"><ScoreRing score={candidate.score.total} label="Talent score"/><div><span>{candidate.score.confidence}% confidence</span><span>{candidate.score.evidenceCount} evidence signals</span><span>{authenticity}/100 authenticity</span></div></div></section>
-        <section className="candidate-stat-row">{[[`${rankedJobs[0].match.total}%`,"Best job match"],[verifiedSkills.length,"Verified skills"],[gapSummary.length,"Priority skill gaps"],[verificationProgress+"%","Profile verified"]].map(([value,label])=><article key={String(label)}><strong>{value}</strong><span>{label}</span></article>)}</section>
+        <section className="candidate-stat-row">{[[`${rankedJobs.length ? rankedJobs[0].match.total : 0}%`,"Best job match"],[verifiedSkills.length,"Verified skills"],[gapSummary.length,"Priority skill gaps"],[verificationProgress+"%","Profile verified"]].map(([value,label])=><article key={String(label)}><strong>{value}</strong><span>{label}</span></article>)}</section>
         <section className="candidate-card" style={{padding: '25px', display: 'flex', flexDirection: 'column', gap: '20px'}}>
           <div><p className="candidate-kicker">LIVE EVIDENCE</p><h3>Recalculate with your resume and GitHub</h3><p>Files are parsed in your browser. GitHub analysis uses public repositories and contribution events.</p></div>
           <div style={{display: 'flex', gap: '20px', alignItems: 'center'}}>
@@ -385,7 +388,10 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
         <div className="candidate-two-column"><section className="candidate-card"><div className="candidate-section-head"><div><p className="candidate-kicker">TALENT PROFILE</p><h3>Seven explainable dimensions</h3></div><span>Formula v1.1</span></div>{dimensions.map(([key,label,weight])=><MetricBar key={key} label={label} value={candidate.score.dimensions[key]} detail={`${weight}% weight`}/>)}<div className="candidate-formula">Total = Coding×.25 + Projects×.20 + Problem solving×.15 + Consistency×.12 + Leadership×.10 + Innovation×.10 + Community×.08</div></section><section className="candidate-card"><div className="candidate-section-head"><div><p className="candidate-kicker">EVIDENCE BLEND</p><h3>Resume + GitHub intelligence</h3></div><strong className="candidate-big-number">{blend.combined}</strong></div><div className="candidate-blend"><article><span>Resume analysis</span><strong>{blend.resume}</strong><small>60% of evidence blend</small></article><article><span>GitHub analysis</span><strong>{blend.github}</strong><small>40% of evidence blend</small></article></div><div className="candidate-formula">Branch2 method: Combined evidence = Resume score×.60 + GitHub score×.40</div><div className="candidate-section-head candidate-job-head"><div><p className="candidate-kicker">TOP OPPORTUNITIES</p><h3>Ranked for your evidence</h3></div><button onClick={()=>setActive("matches")}>View all</button></div>{rankedJobs.slice(0,3).map(({job,match},index)=><button className="candidate-job-compact" key={job.id} onClick={()=>{setSelectedJobId(job.id);setActive("matches")}}><span>{index+1}</span><div><strong>{job.title}</strong><small>{job.company} · {job.location}</small></div><b>{match.total}%<small>match</small></b></button>)}</section></div>
       </div>}
 
-      {active==="matches"&&<div className="candidate-page"><section className="candidate-page-lead"><div><span className="candidate-eyebrow">EXPLAINABLE JOB MATCHING</span><h2>Opportunities ranked for your real capabilities.</h2><p>The MODELS method contributes 60% semantic relevance and 40% explicit skill coverage inside every fit calculation.</p></div><ScoreRing score={rankedJobs[0].match.total} label="Best match"/></section><div className="candidate-match-layout"><section className="candidate-card candidate-job-list"><div className="candidate-section-head"><div><p className="candidate-kicker">RANKED FOR YOU</p><h3>{rankedJobs.length} active roles</h3></div></div>{rankedJobs.map(({job,match},index)=><button key={job.id} className={selectedJob.job.id===job.id?"active":""} onClick={()=>{setSelectedJobId(job.id);setBackendMatch(null);}}><span className="candidate-rank">{String(index+1).padStart(2,"0")}</span><div><strong>{job.title}</strong><small>{job.company} · {job.location} · {job.mode}</small><p>{match.matchedSkills.slice(0,4).join(" · ")||"Adjacent opportunity"}</p></div><b>{match.total}<small>% fit</small></b></button>)}</section><section className="candidate-card candidate-match-detail"><div className="candidate-match-title"><div><span>{selectedJob.job.company}</span><h3>{selectedJob.job.title}</h3><p>{selectedJob.job.location} · {selectedJob.job.mode} · {selectedJob.job.salary}</p></div>
+      {active==="matches"&&<div className="candidate-page"><section className="candidate-page-lead"><div><span className="candidate-eyebrow">EXPLAINABLE JOB MATCHING</span><h2>Opportunities ranked for your real capabilities.</h2><p>The MODELS method contributes 60% semantic relevance and 40% explicit skill coverage inside every fit calculation.</p></div>{rankedJobs.length > 0 && <ScoreRing score={rankedJobs[0].match.total} label="Best match"/>}</section><div className="candidate-match-layout"><section className="candidate-card candidate-job-list"><div className="candidate-section-head"><div><p className="candidate-kicker">RANKED FOR YOU</p><h3>{rankedJobs.length} active roles</h3></div></div>{rankedJobs.map(({job,match},index)=><button key={job.id} className={selectedJob?.job.id===job.id?"active":""} onClick={()=>{setSelectedJobId(job.id);setBackendMatch(null);}}><span className="candidate-rank">{String(index+1).padStart(2,"0")}</span><div><strong>{job.title}</strong><small>{job.company} · {job.location} · {job.mode}</small><p>{match.matchedSkills.slice(0,4).join(" · ")||"Adjacent opportunity"}</p></div><b>{match.total}<small>% fit</small></b></button>)}</section><section className="candidate-card candidate-match-detail">
+        {selectedJob ? (
+          <>
+            <div className="candidate-match-title"><div><span>{selectedJob.job.company}</span><h3>{selectedJob.job.title}</h3><p>{selectedJob.job.location} · {selectedJob.job.mode} · {selectedJob.job.salary}</p></div>
         <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
           <ScoreRing score={selectedJob.match.total} label="Local Match"/>
           {backendMatch && <ScoreRing score={backendMatch.score} label="Backend ML Match"/>}
@@ -394,9 +400,14 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
         <button className="candidate-primary full" onClick={runBackendMatch} disabled={matchLoading} style={{marginBottom: "10px"}}>
           {matchLoading ? "Calculating..." : "Calculate ML Match (Backend)"}
         </button>
-        <button className="candidate-secondary full" onClick={() => setApplyModalOpen(true)}>Apply for Role</button></section></div></div>}
+        <button className="candidate-secondary full" onClick={() => setApplyModalOpen(true)}>Apply for Role</button>
+          </>
+        ) : (
+          <div style={{textAlign: 'center', color: '#64748b', padding: '40px'}}>No jobs available. Please ask a recruiter to create some!</div>
+        )}
+      </section></div></div>}
 
-      {applyModalOpen && (
+      {applyModalOpen && selectedJob && (
         <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
           <div style={{background: 'white', padding: '30px', borderRadius: '12px', width: '400px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'}}>
             <h3 style={{marginTop: 0}}>Apply to {selectedJob?.job.title}</h3>

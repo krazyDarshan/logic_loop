@@ -510,12 +510,24 @@ function JobsView() {
   const [applications, setApplications] = useState<any[]>([]);
   
   useEffect(() => {
-    fetch("http://localhost:8000/api/jobs/").then(res => res.json()).then(setJobs);
+    fetch("http://localhost:8000/api/jobs/")
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setJobs(data);
+        else console.error("Failed to fetch jobs:", data);
+      })
+      .catch(console.error);
   }, []);
   
   useEffect(() => {
     if (selectedJob) {
-      fetch(`http://localhost:8000/api/jobs/${selectedJob}/applications`).then(res => res.json()).then(setApplications);
+      fetch(`http://localhost:8000/api/jobs/${selectedJob}/applications`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) setApplications(data);
+          else console.error("Failed to fetch applications:", data);
+        })
+        .catch(console.error);
     } else {
       setApplications([]);
     }
