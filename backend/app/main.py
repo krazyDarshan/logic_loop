@@ -1,0 +1,38 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.api.routes import analyze, candidates, interview, matchmaker, hackathon, jobs
+from app.db.database import engine, Base
+
+import os
+from fastapi.staticfiles import StaticFiles
+
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Warning: Could not connect to database to create tables. Ensure DATABASE_URL is set in .env. Error: {e}")
+
+# Ensure uploads directory exists
+os.makedirs("uploads", exist_ok=True)
+
+app = FastAPI(title="SkillNova API", version="1.0.0")
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(analyze.router, prefix="/api/analyze", tags=["analyze"])
+app.include_router(candidates.router, prefix="/api/candidates", tags=["candidates"])
+app.include_router(interview.router, prefix="/api/interview", tags=["interview"])
+app.include_router(matchmaker.router, prefix="/api/matchmaker", tags=["matchmaker"])
+app.include_router(hackathon.router, prefix="/api/hackathon", tags=["hackathon"])
+app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+
+@app.get("/")
+def read_root():
+    return {"message": "SkillNova Backend is running"}
