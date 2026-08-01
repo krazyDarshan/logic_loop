@@ -232,3 +232,469 @@ body{background:#f7f9fb}
 @media(max-width:1150px){.auth-shell{grid-template-columns:1fr}.auth-story{display:none}.auth-panel{min-height:100vh}.auth-mobile-brand{display:flex;margin-bottom:26px}.candidate-evidence-connect{grid-template-columns:1fr 1fr}.candidate-evidence-connect>div:first-child{grid-column:1/-1}.candidate-evidence-connect .candidate-primary{align-self:end}.candidate-two-column,.candidate-match-layout,.candidate-gap-grid,.candidate-export-grid{grid-template-columns:1fr}.candidate-verification-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:800px){.candidate-sidebar{position:static;width:auto;height:auto;padding:14px}.candidate-brand,.candidate-profile-mini,.candidate-sidebar-foot{display:none}.candidate-sidebar nav{display:flex;overflow-x:auto;gap:5px}.candidate-sidebar nav button{min-width:130px}.candidate-main{margin-left:0}.candidate-topbar{padding:0 17px}.candidate-page{padding:18px 14px 30px}.candidate-hero,.candidate-page-lead{align-items:flex-start;padding:27px 22px}.candidate-hero h2,.candidate-page-lead h2{font-size:28px}.candidate-score-panel{display:none}.candidate-stat-row{grid-template-columns:1fr 1fr}.candidate-evidence-connect{grid-template-columns:1fr}.candidate-evidence-connect>div:first-child{grid-column:auto}.candidate-evidence-connect input{max-width:none}.candidate-verification-grid{grid-template-columns:1fr}.candidate-skill-table{overflow-x:auto}.candidate-skill-table>div{min-width:660px}.candidate-footer{padding:18px 14px;flex-direction:column;gap:5px}.recruiter-signout{display:none}}
 @media(max-width:540px){.auth-panel{padding:25px 18px}.auth-heading h2{font-size:25px}.auth-role-grid{grid-template-columns:1fr}.auth-role-grid>button{min-height:105px}.onboarding-shell{padding:18px 12px}.onboarding-brand{align-self:flex-start}.onboarding-card{padding:24px 18px;margin-top:25px}.onboarding-fields{grid-template-columns:1fr}.onboarding-fields label.wide{grid-column:auto}.candidate-hero-actions,.candidate-export-actions{flex-direction:column}.candidate-hero-actions button,.candidate-export-actions button{width:100%}.candidate-stat-row,.candidate-blend,.candidate-model-split,.candidate-skill-columns{grid-template-columns:1fr}.candidate-top-actions>span{display:none}.candidate-resume-preview article>div{grid-template-columns:1fr}}
+
+/* CSS-only motion and interaction system
+   Kept in this file so feature branches do not need component changes. */
+:root{
+  --motion-fast:160ms;
+  --motion-base:260ms;
+  --motion-slow:560ms;
+  --motion-ease:cubic-bezier(.22,1,.36,1);
+  --motion-spring:cubic-bezier(.2,.9,.28,1.18);
+  --focus-ring:#3b6fa82e;
+  --hover-shadow:0 14px 32px #29475d12;
+}
+
+@property --score-angle{
+  syntax:"<angle>";
+  inherits:false;
+  initial-value:0deg;
+}
+
+@property --candidate-score{
+  syntax:"<angle>";
+  inherits:false;
+  initial-value:0deg;
+}
+
+@keyframes sn-page-enter{
+  from{opacity:0;transform:translateY(9px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+@keyframes sn-card-enter{
+  from{opacity:0;transform:translateY(13px) scale(.992)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+
+@keyframes sn-slide-left{
+  from{opacity:0;transform:translateX(-12px)}
+  to{opacity:1;transform:translateX(0)}
+}
+
+@keyframes sn-slide-right{
+  from{opacity:0;transform:translateX(12px)}
+  to{opacity:1;transform:translateX(0)}
+}
+
+@keyframes sn-pop{
+  0%{opacity:0;transform:scale(.86)}
+  70%{opacity:1;transform:scale(1.035)}
+  100%{opacity:1;transform:scale(1)}
+}
+
+@keyframes sn-score-reveal{
+  from{--score-angle:0deg}
+}
+
+@keyframes sn-candidate-score-reveal{
+  from{--candidate-score:0deg}
+}
+
+@keyframes sn-bar-grow{
+  from{transform:scaleX(0)}
+  to{transform:scaleX(1)}
+}
+
+@keyframes sn-soft-pulse{
+  0%,100%{opacity:1;box-shadow:0 0 0 4px #16956f15}
+  50%{opacity:.72;box-shadow:0 0 0 7px #16956f08}
+}
+
+@keyframes sn-border-pulse{
+  0%,100%{border-color:#d4e1eb;box-shadow:0 0 0 0 #3b6fa800}
+  50%{border-color:#91b3d2;box-shadow:0 0 0 4px #3b6fa80a}
+}
+
+@keyframes sn-shimmer{
+  from{background-position:200% 0}
+  to{background-position:-200% 0}
+}
+
+@keyframes sn-message-enter{
+  from{opacity:0;transform:translateY(6px) scale(.985)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+
+/* App and view entrances */
+.view-wrap,
+.candidate-page,
+.auth-card,
+.onboarding-card{
+  animation:sn-page-enter var(--motion-slow) var(--motion-ease) both;
+}
+
+.hero-intro,
+.product-hero,
+.page-lead,
+.candidate-hero,
+.candidate-page-lead{
+  animation:sn-card-enter 620ms var(--motion-ease) both;
+}
+
+.hero-copy,
+.candidate-hero-copy,
+.auth-story-copy{
+  animation:sn-slide-left 660ms var(--motion-ease) 70ms both;
+}
+
+.evidence-board,
+.hero-score-panel,
+.candidate-score-panel,
+.auth-signal-card{
+  animation:sn-slide-right 660ms var(--motion-ease) 120ms both;
+}
+
+.analysis-workbench,
+.analysis-console,
+.match-layout,
+.hackathon-layout,
+.verify-final-grid,
+.candidate-match-layout,
+.candidate-gap-grid,
+.candidate-export-grid{
+  animation:sn-card-enter 520ms var(--motion-ease) 90ms both;
+}
+
+/* Stagger repeated information without component-level animation props */
+.results-grid>.content-card,
+.final-grid>.content-card,
+.hackathon-stats>div,
+.recruiter-stats>div,
+.candidate-stat-row>article,
+.candidate-verification-grid>article,
+.candidate-two-column>.candidate-card,
+.candidate-model-split>article,
+.candidate-blend>article{
+  animation:sn-card-enter 520ms var(--motion-ease) both;
+}
+
+.results-grid>:nth-child(2),
+.final-grid>:nth-child(2),
+.hackathon-stats>:nth-child(2),
+.recruiter-stats>:nth-child(2),
+.candidate-stat-row>:nth-child(2),
+.candidate-verification-grid>:nth-child(2),
+.candidate-two-column>:nth-child(2){animation-delay:60ms}
+
+.results-grid>:nth-child(3),
+.final-grid>:nth-child(3),
+.hackathon-stats>:nth-child(3),
+.recruiter-stats>:nth-child(3),
+.candidate-stat-row>:nth-child(3),
+.candidate-verification-grid>:nth-child(3){animation-delay:120ms}
+
+.results-grid>:nth-child(4),
+.final-grid>:nth-child(4),
+.hackathon-stats>:nth-child(4),
+.recruiter-stats>:nth-child(4),
+.candidate-stat-row>:nth-child(4),
+.candidate-verification-grid>:nth-child(4){animation-delay:180ms}
+
+/* Score, progress, and live AI signals */
+.score-ring{
+  animation:sn-score-reveal 900ms var(--motion-ease) 180ms both;
+}
+
+.candidate-score-ring{
+  animation:sn-candidate-score-reveal 900ms var(--motion-ease) 180ms both;
+}
+
+.bar i,
+.progress-track i,
+.candidate-bar i,
+.evidence-meter span{
+  transform-origin:left center;
+  animation:sn-bar-grow 760ms var(--motion-ease) 160ms both;
+  will-change:transform;
+}
+
+.online-dot,
+.system-status span,
+.live-engine i,
+.engine-card span i,
+.auth-live i,
+.candidate-top-actions>span i,
+.agent-id p i{
+  animation:sn-soft-pulse 2.4s ease-in-out infinite;
+}
+
+.verified-dot,
+.result-check,
+.ready-pill,
+.verified-state,
+.low-risk,
+.candidate-status.done{
+  animation:sn-pop 430ms var(--motion-spring) 260ms both;
+}
+
+.analysis-message,
+.candidate-evidence-message,
+.onboarding-error,
+.result-banner{
+  animation:sn-message-enter 380ms var(--motion-ease) both;
+}
+
+.spinner{animation:spin .75s linear infinite}
+
+.auth-loading{
+  background:linear-gradient(90deg,#edf2f6 25%,#f8fafc 48%,#edf2f6 72%);
+  background-size:220% 100%;
+  animation:sn-shimmer 1.4s linear infinite;
+}
+
+/* Professional hover and press feedback */
+.content-card,
+.candidate-card,
+.candidate-stat-row article,
+.candidate-verification-grid article,
+.hackathon-stats>div,
+.recruiter-stats>div,
+.hero-score-panel,
+.candidate-score-panel,
+.evidence-board,
+.auth-card,
+.onboarding-card{
+  transition:transform var(--motion-base) var(--motion-ease),
+             box-shadow var(--motion-base) ease,
+             border-color var(--motion-base) ease;
+}
+
+@media(hover:hover) and (pointer:fine){
+  .content-card:hover,
+  .candidate-card:hover,
+  .candidate-stat-row article:hover,
+  .candidate-verification-grid article:hover,
+  .hackathon-stats>div:hover,
+  .recruiter-stats>div:hover{
+    transform:translateY(-3px);
+    border-color:#cad9e4;
+    box-shadow:var(--hover-shadow);
+  }
+
+  .hero-score-panel:hover,
+  .candidate-score-panel:hover,
+  .evidence-board:hover{
+    transform:translateY(-2px);
+    box-shadow:0 18px 38px #29475d16;
+  }
+}
+
+.primary-button,
+.ghost-button,
+.text-button,
+.candidate-primary,
+.candidate-secondary,
+.auth-primary,
+.auth-tabs button,
+.auth-role-grid>button,
+.shortlist,
+.table-footer button,
+.skill-evidence-list button,
+.project-row,
+.candidate-job-list>button,
+.candidate-job-compact,
+.candidate-sidebar nav button,
+.sidebar nav button{
+  transition:color var(--motion-fast) ease,
+             background-color var(--motion-fast) ease,
+             border-color var(--motion-fast) ease,
+             box-shadow var(--motion-base) ease,
+             transform var(--motion-fast) var(--motion-ease);
+}
+
+@media(hover:hover) and (pointer:fine){
+  .primary-button:hover,
+  .candidate-primary:hover,
+  .auth-primary:hover{
+    transform:translateY(-2px);
+    box-shadow:0 9px 20px #315f9126;
+  }
+
+  .ghost-button:hover,
+  .candidate-secondary:hover,
+  .shortlist:hover,
+  .table-footer button:hover{
+    transform:translateY(-1px);
+    background:#f8fbfd;
+    border-color:#aebfcd;
+  }
+
+  .text-button:hover,
+  .candidate-section-head>button:hover,
+  .candidate-roadmap button:hover{
+    transform:translateX(2px);
+  }
+
+  .candidate-job-list>button:hover,
+  .candidate-job-compact:hover,
+  .project-row:hover,
+  .skill-evidence-list button:hover{
+    transform:translateX(3px);
+  }
+
+  .auth-role-grid>button:hover{
+    transform:translateY(-3px);
+    border-color:#9fb9cf;
+    box-shadow:0 12px 28px #29475d12;
+  }
+}
+
+.primary-button:active,
+.ghost-button:active,
+.candidate-primary:active,
+.candidate-secondary:active,
+.auth-primary:active,
+.shortlist:active,
+.table-footer button:active{
+  transform:translateY(0) scale(.975);
+  transition-duration:80ms;
+}
+
+/* Input, upload, navigation, and table polish */
+.input-shell,
+.text-input,
+.field-group textarea,
+.answer-area textarea,
+.onboarding-fields input,
+.candidate-evidence-connect input,
+.candidate-picker select,
+.search-shell,
+.copilot-input{
+  transition:border-color var(--motion-fast) ease,
+             box-shadow var(--motion-fast) ease,
+             background-color var(--motion-fast) ease;
+}
+
+.input-shell:focus-within,
+.search-shell:focus-within,
+.copilot-input:focus-within{
+  border-color:#7199bd;
+  box-shadow:0 0 0 4px var(--focus-ring);
+  background:#fff;
+}
+
+.upload-zone:hover,
+.upload-zone.dragging{
+  transform:translateY(-2px);
+  box-shadow:0 10px 24px #29475d0d;
+}
+
+.upload-zone.dragging{
+  animation:sn-border-pulse 1.2s ease-in-out infinite;
+}
+
+.sidebar nav button.active .nav-icon,
+.candidate-sidebar nav button.active{
+  animation:sn-pop 300ms var(--motion-spring) both;
+}
+
+.sidebar nav button.active i,
+.candidate-sidebar nav button.active:before{
+  animation:sn-page-enter 300ms var(--motion-ease) both;
+}
+
+.pipeline-step,
+.calculation-step,
+.candidate-gap-row,
+.verify-skill,
+.repo-row,
+.trust-factor,
+.fraud-checks>div,
+.audit-timeline>div{
+  transition:background-color var(--motion-fast) ease,
+             border-color var(--motion-fast) ease,
+             transform var(--motion-fast) var(--motion-ease);
+}
+
+@media(hover:hover) and (pointer:fine){
+  .pipeline-step:hover,
+  .calculation-step:hover,
+  .candidate-gap-row:hover,
+  .verify-skill:hover,
+  .repo-row:hover,
+  .trust-factor:hover,
+  .fraud-checks>div:hover,
+  .audit-timeline>div:hover{
+    background:#f8fbfd;
+    transform:translateX(2px);
+  }
+
+  tbody tr{
+    transition:background-color var(--motion-fast) ease;
+  }
+
+  tbody tr:hover{background:#f7fafc}
+}
+
+.agent-message,
+.user-message{
+  animation:sn-message-enter 360ms var(--motion-ease) both;
+}
+
+.agent-message:nth-last-child(2),
+.user-message:nth-last-child(2){animation-delay:45ms}
+
+.agent-message:last-child,
+.user-message:last-child{animation-delay:90ms}
+
+.member-stack span,
+.micro-skills span,
+.candidate-skill,
+.skill-pill{
+  transition:transform var(--motion-fast) var(--motion-spring),
+             box-shadow var(--motion-fast) ease;
+}
+
+@media(hover:hover) and (pointer:fine){
+  .member-stack span:hover,
+  .micro-skills span:hover,
+  .candidate-skill:hover,
+  .skill-pill:hover{
+    transform:translateY(-2px);
+    box-shadow:0 5px 12px #29475d12;
+  }
+}
+
+/* Consistent keyboard accessibility */
+:where(button,a,input,textarea,select,[tabindex]):focus-visible{
+  outline:2px solid #4f83bb;
+  outline-offset:3px;
+}
+
+.input-shell:has(input:focus-visible),
+.search-shell:has(input:focus-visible),
+.copilot-input:has(input:focus-visible){
+  outline:0;
+}
+
+.input-shell input:focus-visible,
+.search-shell input:focus-visible,
+.copilot-input input:focus-visible{
+  outline:0;
+}
+
+/* Mobile motion remains compact and avoids sideways overflow. */
+@media(max-width:800px){
+  .sidebar.open{transition:transform var(--motion-base) var(--motion-ease),box-shadow var(--motion-base) ease}
+  .sidebar-overlay{animation:sn-page-enter 220ms ease both}
+  .candidate-sidebar nav button:hover,
+  .candidate-sidebar nav button.active{transform:none}
+  .hero-intro,
+  .product-hero,
+  .page-lead,
+  .candidate-hero,
+  .candidate-page-lead{animation-duration:460ms}
+}
+
+/* Respect operating-system accessibility settings. */
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{
+    animation-duration:.01ms!important;
+    animation-delay:0ms!important;
+    animation-iteration-count:1!important;
+    scroll-behavior:auto!important;
+    transition-duration:.01ms!important;
+  }
+}
