@@ -50,10 +50,7 @@ export default defineConfig(async () => {
     plugins: [
       vinext(),
       sites(),
-      cloudflare({
-        viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
-        config: localBindingConfig,
-      }),
+      // cloudflare plugin removed because we use FastAPI backend instead of Cloudflare Workers
     ],
   };
 });

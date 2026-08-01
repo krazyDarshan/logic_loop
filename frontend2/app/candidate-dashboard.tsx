@@ -134,7 +134,7 @@ function downloadPortfolio(candidate: Candidate) {
   const anchor=document.createElement("a");anchor.href=url;anchor.download=`${candidate.name.replace(/\s+/g,"-").toLowerCase()}-portfolio.html`;anchor.click();URL.revokeObjectURL(url);
 }
 
-export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
+export function CandidateDashboard({ profile, onLogout }: { profile: AccountProfile; onLogout?: () => void }) {
   const [active,setActive]=useState<CandidateView>("overview");
   const [candidate,setCandidate]=useState<Candidate>(()=>buildCandidate(profile));
   const [jobs, setJobs] = useState<JobOpening[]>(fallbackJobs);
@@ -173,7 +173,7 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
   const [syncing,setSyncing]=useState(false);
   const [message,setMessage]=useState("Add real evidence to replace onboarding claims with verified signals.");
   const rankedJobs=useMemo(()=>jobs.map((job)=>({job,match:calculateJobMatch(candidate,job.description)})).sort((a,b)=>b.match.total-a.match.total),[candidate,jobs]);
-  const [selectedJobId,setSelectedJobId]=useState(jobs[0].id);
+  const [selectedJobId,setSelectedJobId]=useState(jobs.length > 0 ? jobs[0].id : "");
   const selectedJob=rankedJobs.find((item)=>item.job.id===selectedJobId) || rankedJobs[0];
   const topMatch=rankedJobs[0].match;
   const blend=calculateEvidenceBlend(candidate,topMatch);
@@ -196,13 +196,14 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
       formData.append("file", resumeFile);
       const response = await fetch("http://localhost:8000/api/analyze/resume", { method: "POST", body: formData });
       let backMsg = "";
+      let resData: any;
       if (response.ok) {
-        const resData = await response.json();
+        resData = await response.json();
         backMsg = `[Backend Resume Score: ${resData.analysis.resume_total_score}] `;
         setBackendScores(prev => ({...prev, resume: resData.analysis.resume_total_score}));
       }
       const resume=parseResumeText(await extractFileText(resumeFile));
-      const fullData = { resume_analysis: resData.analysis };
+      const fullData = resData ? { resume_analysis: resData.analysis } : { resume_text: resume };
       let merged = mergeBackendCandidate(candidate, fullData);
       merged = {...merged, role: profile.professionalTitle || merged.role, location: profile.location || merged.location};
       
@@ -238,12 +239,13 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
         body: JSON.stringify({ username: githubUsername.trim() }) 
       });
       let backMsg = "";
+      let resData: any;
       if (response.ok) {
-        const resData = await response.json();
+        resData = await response.json();
         backMsg = `[Backend GitHub Score: ${resData.analysis.github_total_score}] `;
         setBackendScores(prev => ({...prev, github: resData.analysis.github_total_score}));
       }
-      const fullData = { github_username: githubUsername.trim(), github_analysis: resData.analysis };
+      const fullData = resData ? { github_username: githubUsername.trim(), github_analysis: resData.analysis } : { github_username: githubUsername.trim() };
       let merged = mergeBackendCandidate(candidate, fullData);
       merged = {...merged, role: profile.professionalTitle || merged.role, location: profile.location || merged.location, source: "live"};
       
@@ -352,7 +354,11 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
       <div className="candidate-brand"><span>✦</span><div><strong>SkillNova</strong><small>Candidate intelligence</small></div></div>
       <div className="candidate-profile-mini"><span>{initials}</span><div><strong>{profile.displayName}</strong><small>{profile.professionalTitle}</small></div></div>
       <nav aria-label="Candidate workspace">{navItems.map((item)=><button key={item.id} className={active===item.id?"active":""} onClick={()=>{setActive(item.id);window.scrollTo({top:0,behavior:"smooth"})}}><small>{item.eyebrow}</small><span>{item.label}</span></button>)}</nav>
-      <div className="candidate-sidebar-foot"><div><span>Profile strength</span><strong>{verificationProgress}%</strong></div><div className="candidate-bar"><i style={{width:`${verificationProgress}%`}}/></div><a href="/signout-with-chatgpt?return_to=/">Sign out</a></div>
+      <div className="candidate-sidebar-foot">
+        <div><span>Profile strength</span><strong>{verificationProgress}%</strong></div>
+        <div className="candidate-bar"><i style={{width:`${verificationProgress}%`}}/></div>
+        <button onClick={onLogout} className="candidate-logout-button">Sign out</button>
+      </div>
     </aside>
     <section className="candidate-main">
       <header className="candidate-topbar"><div className="candidate-title-group"><button type="button" className="candidate-back-button" aria-label="Back">Back</button><div><p>{navItems.find((item)=>item.id===active)?.eyebrow}</p><h1>{navItems.find((item)=>item.id===active)?.label}</h1></div></div><div className="candidate-top-actions"><span><i/>AI scoring live</span><button onClick={()=>setActive("verification")}>{initials}</button></div></header>

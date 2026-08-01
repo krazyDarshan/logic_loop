@@ -16,9 +16,11 @@ import {
 } from "./talent-engine";
 import { extractFileText, fetchGithubEvidence } from "./evidence-client";
 import { CandidateDashboard } from "./candidate-dashboard";
-import type { AccountProfile, AccountRole, AuthenticatedUser, SessionResponse } from "./account-types";
+import type { AccountProfile, AccountRole } from "./account-types";
+import { auth } from "../lib/firebase";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 
-type View = "profile" | "verify" | "hackathon" | "recruiter" | "trust" | "jobs";
+type View = "profile" | "verify" | "hackathon" | "recruiter" | "trust" | "jobs" | "createjob";
 type IconName = "spark" | "profile" | "match" | "verify" | "trophy" | "people" | "github" | "file" | "arrow" | "check" | "search" | "briefcase" | "menu" | "close" | "shield" | "code" | "clock" | "download" | "compare" | "database" | "alert";
 
 const iconPaths: Record<IconName, ReactNode> = {
@@ -610,7 +612,7 @@ function JobsView() {
   </div>;
 }
 
-function RecruiterWorkspace({profile}:{profile:AccountProfile}){
+function RecruiterWorkspace({profile, onLogout}:{profile:AccountProfile, onLogout?:()=>void}){
   const [active,setActive]=useState<View>("recruiter");
   const [pool,setPool]=useState<Candidate[]>(seededCandidates);
   const [selectedId,setSelectedId]=useState(seededCandidates[0].id);
@@ -638,42 +640,122 @@ function RecruiterWorkspace({profile}:{profile:AccountProfile}){
   const initials=profile.displayName.split(/\s+/).map(part=>part[0]).join("").slice(0,2).toUpperCase();
   const navigate=(view:View)=>{setActive(view);setMenuOpen(false);window.scrollTo({top:0,behavior:"smooth"})};
   const handleAnalyzed=(candidate:Candidate)=>{setPool(current=>[candidate,...current.filter(item=>!item.id.startsWith("live-")&&item.id!==candidate.id)]);setSelectedId(candidate.id)};
-  return <main className="app-shell"><aside className={`sidebar ${menuOpen?"open":""}`}><div className="brand"><span className="brand-mark"><Icon name="spark" size={18}/></span><div><strong>SkillNova</strong><small>Evidence-led hiring</small></div><button className="icon-button close-menu" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"><Icon name="close"/></button></div><nav><p className="nav-label">INTELLIGENCE WORKSPACE</p>{navItems.map(item=><button key={item.id} className={active===item.id?"active":""} onClick={()=>navigate(item.id)}><span className="nav-icon"><Icon name={item.icon}/></span><span><small>{item.eyebrow}</small>{item.label}</span>{active===item.id&&<i/>}</button>)}</nav><div className="engine-card"><span><i/>Live engine</span><strong>{pool.length} candidates</strong><small>Transparent scoring · v1.1</small></div><div className="sidebar-user"><span className="small-avatar">{initials}</span><div><strong>{profile.displayName}</strong><small>Recruiter workspace</small></div><span className="online-dot"/></div></aside>{menuOpen&&<button className="sidebar-overlay" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"/>}<section className="main-stage"><AppHeader active={active} onMenu={()=>setMenuOpen(true)} initials={initials}/>{active==="profile"&&<ProfileView candidate={selected} onCandidateAnalyzed={handleAnalyzed} onNavigate={navigate}/>} {active==="jobs"&&<JobsView/>} {active==="verify"&&<VerifyView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="hackathon"&&<HackathonView pool={pool} onSelect={setSelectedId} onNavigate={navigate}/>} {active==="recruiter"&&<RecruiterView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="trust"&&<TrustView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>}<footer><span><strong>SkillNova</strong> · Proof over paperwork.</span><span>Decision support only · Human approval required</span></footer></section></main>
+  return <main className="app-shell"><aside className={`sidebar ${menuOpen?"open":""}`}><div className="brand"><span className="brand-mark"><Icon name="spark" size={18}/></span><div><strong>SkillNova</strong><small>Evidence-led hiring</small></div><button className="icon-button close-menu" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"><Icon name="close"/></button></div><nav><p className="nav-label">INTELLIGENCE WORKSPACE</p>{navItems.map(item=><button key={item.id} className={active===item.id?"active":""} onClick={()=>navigate(item.id)}><span className="nav-icon"><Icon name={item.icon}/></span><span><small>{item.eyebrow}</small>{item.label}</span>{active===item.id&&<i/>}</button>)}</nav><div className="engine-card"><span><i/>Live engine</span><strong>{pool.length} candidates</strong><small>Transparent scoring · v1.1</small></div><div className="sidebar-user"><span className="small-avatar">{initials}</span><div><strong>{profile.displayName}</strong><small>Recruiter workspace</small></div><span className="online-dot"/></div>
+  <button className="ghost-button" style={{margin: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}} onClick={onLogout}>
+    <Icon name="close" size={16}/> Logout / Back to Auth
+  </button>
+  </aside>{menuOpen&&<button className="sidebar-overlay" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"/>}<section className="main-stage"><AppHeader active={active} onMenu={()=>setMenuOpen(true)} initials={initials}/>{active==="profile"&&<ProfileView candidate={selected} onCandidateAnalyzed={handleAnalyzed} onNavigate={navigate}/>} {active==="jobs"&&<JobsView/>} {active==="verify"&&<VerifyView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="hackathon"&&<HackathonView pool={pool} onSelect={setSelectedId} onNavigate={navigate}/>} {active==="recruiter"&&<RecruiterView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="trust"&&<TrustView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>}<footer><span><strong>SkillNova</strong> · Proof over paperwork.</span><span>Decision support only · Human approval required</span></footer></section></main>
 }
 
-function AuthScreen({onPreview}:{onPreview:(role:AccountRole)=>void}){
+function AuthScreen({onPreview, onLogin}:{onPreview:(role:AccountRole)=>void, onLogin: (user: FirebaseUser) => void}){
   const [mode,setMode]=useState<"login"|"register">("login");
   const [role,setRole]=useState<AccountRole>("candidate");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [localPreview,setLocalPreview]=useState(false);
+  
   useEffect(()=>{const timer=window.setTimeout(()=>setLocalPreview(["localhost","127.0.0.1"].includes(window.location.hostname)),0);return()=>window.clearTimeout(timer)},[]);
-  const returnTo=`/?mode=${mode}&role=${role}`;
-  const signInPath=`/signin-with-chatgpt?return_to=${encodeURIComponent(returnTo)}`;
-  return <main className="auth-shell"><section className="auth-story"><div className="auth-brand"><span>✦</span><strong>SkillNova</strong></div><div className="auth-story-copy"><span>AI-NATIVE TALENT INTELLIGENCE</span><h1>Proof of skill.<br/>One trusted profile.</h1><p>Transform resumes, GitHub work, assessments and hackathon evidence into a hiring identity people can understand and trust.</p><div className="auth-proof-row"><div><strong>7</strong><span>explainable score dimensions</span></div><div><strong>60/40</strong><span>semantic and skill matching</span></div><div><strong>100%</strong><span>human decision control</span></div></div></div><div className="auth-signal-card"><div><span className="auth-live"><i/>AI scoring live</span><strong>Evidence → match → verify → hire</strong></div><div className="auth-mini-score"><b>92</b><span>Talent<br/>score</span></div></div></section><section className="auth-panel"><div className="auth-card"><div className="auth-mobile-brand"><span>✦</span><strong>SkillNova</strong></div><div className="auth-tabs"><button className={mode==="login"?"active":""} onClick={()=>setMode("login")}>Log in</button><button className={mode==="register"?"active":""} onClick={()=>setMode("register")}>Create account</button></div><div className="auth-heading"><p>{mode==="login"?"WELCOME BACK":"JOIN SKILLNOVA"}</p><h2>{mode==="login"?"Open your intelligence workspace":"Build your verified talent identity"}</h2><span>{mode==="login"?"Your saved role opens the correct candidate or recruiter window automatically.":"Choose how you will use SkillNova. You can complete your profile after secure sign-in."}</span></div><div className="auth-role-grid"><button className={role==="candidate"?"active":""} onClick={()=>setRole("candidate")}><span className="auth-role-icon">C</span><strong>Candidate</strong><small>Talent profile, skill gaps, job matches and exports</small><i>{role==="candidate"?"✓":""}</i></button><button className={role==="recruiter"?"active":""} onClick={()=>setRole("recruiter")}><span className="auth-role-icon">R</span><strong>Recruiter</strong><small>Discovery, verification, shortlisting and analytics</small><i>{role==="recruiter"?"✓":""}</i></button></div><a className="auth-primary" href={signInPath}>{mode==="login"?"Continue to secure login":"Continue to registration"}<span>→</span></a><div className="auth-secure"><span>✓</span><p><strong>Secure hosted sign-in</strong><small>SkillNova never receives or stores your password.</small></p></div>{localPreview&&<div className="auth-preview"><span>Local development</span><button onClick={()=>onPreview(role)}>Preview {role} workspace</button></div>}<p className="auth-legal">By continuing, you agree to use AI scores as decision support with human review.</p></div></section></main>
+  
+  const handleAuth = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      if (mode === "login") {
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        onLogin(cred.user);
+      } else {
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        onLogin(cred.user);
+      }
+    } catch (err: any) {
+      setError(err.message || "Authentication failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return <main className="auth-shell"><section className="auth-story"><div className="auth-brand"><span>✦</span><strong>SkillNova</strong></div><div className="auth-story-copy"><span>AI-NATIVE TALENT INTELLIGENCE</span><h1>Proof of skill.<br/>One trusted profile.</h1><p>Transform resumes, GitHub work, assessments and hackathon evidence into a hiring identity people can understand and trust.</p><div className="auth-proof-row"><div><strong>7</strong><span>explainable score dimensions</span></div><div><strong>60/40</strong><span>semantic and skill matching</span></div><div><strong>100%</strong><span>human decision control</span></div></div></div><div className="auth-signal-card"><div><span className="auth-live"><i/>AI scoring live</span><strong>Evidence → match → verify → hire</strong></div><div className="auth-mini-score"><b>92</b><span>Talent<br/>score</span></div></div></section><section className="auth-panel"><div className="auth-card"><div className="auth-mobile-brand"><span>✦</span><strong>SkillNova</strong></div><div className="auth-tabs"><button className={mode==="login"?"active":""} onClick={()=>setMode("login")}>Log in</button><button className={mode==="register"?"active":""} onClick={()=>setMode("register")}>Create account</button></div><div className="auth-heading"><p>{mode==="login"?"WELCOME BACK":"JOIN SKILLNOVA"}</p><h2>{mode==="login"?"Open your intelligence workspace":"Build your verified talent identity"}</h2><span>{mode==="login"?"Your saved role opens the correct candidate or recruiter window automatically.":"Choose how you will use SkillNova. You can complete your profile after secure sign-in."}</span></div><div className="auth-role-grid"><button className={role==="candidate"?"active":""} onClick={()=>setRole("candidate")}><span className="auth-role-icon">C</span><strong>Candidate</strong><small>Talent profile, skill gaps, job matches and exports</small><i>{role==="candidate"?"✓":""}</i></button><button className={role==="recruiter"?"active":""} onClick={()=>setRole("recruiter")}><span className="auth-role-icon">R</span><strong>Recruiter</strong><small>Discovery, verification, shortlisting and analytics</small><i>{role==="recruiter"?"✓":""}</i></button></div>
+  <form onSubmit={handleAuth} style={{display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px'}}>
+    <input type="email" placeholder="Email Address" required value={email} onChange={e => setEmail(e.target.value)} style={{padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1'}} />
+    <input type="password" placeholder="Password" required value={password} onChange={e => setPassword(e.target.value)} style={{padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1'}} />
+    {error && <div style={{color: 'red', fontSize: '14px'}}>{error}</div>}
+    <button type="submit" className="auth-primary" style={{border: 'none', cursor: 'pointer', width: '100%', boxSizing: 'border-box'}} disabled={loading}>
+      {loading ? "Please wait..." : (mode==="login"?"Secure login":"Create account")}<span>→</span>
+    </button>
+  </form>
+  <div className="auth-secure"><span>✓</span><p><strong>Secure Firebase sign-in</strong><small>Authenticated directly via Firebase.</small></p></div>{localPreview&&<div className="auth-preview"><span>Local development</span><button onClick={()=>onPreview(role)}>Preview {role} workspace</button></div>}<p className="auth-legal">By continuing, you agree to use AI scores as decision support with human review.</p></div></section></main>
 }
 
-function RegistrationScreen({user,onComplete}:{user:AuthenticatedUser;onComplete:(profile:AccountProfile)=>void}){
+function RegistrationScreen({user,onComplete}:{user:FirebaseUser;onComplete:(profile:AccountProfile)=>void}){
   const params=typeof window!=="undefined"?new URLSearchParams(window.location.search):null;
   const [role,setRole]=useState<AccountRole>(params?.get("role")==="recruiter"?"recruiter":"candidate");
-  const [displayName,setDisplayName]=useState(user.fullName||user.displayName.split("@")[0]);
+  const [displayName,setDisplayName]=useState(user.displayName||user.email?.split("@")[0]||"");
   const [professionalTitle,setProfessionalTitle]=useState("");
   const [experienceYears,setExperienceYears]=useState(0);
   const [location,setLocation]=useState("");
   const [githubUsername,setGithubUsername]=useState("");
   const [saving,setSaving]=useState(false);
-  const [error,setError]=useState("");
-  const submit=async(event:FormEvent)=>{event.preventDefault();setSaving(true);setError("");try{const response=await fetch("/api/session",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({role,displayName,professionalTitle,experienceYears,location,githubUsername})});const data=await response.json() as SessionResponse&{error?:string};if(!response.ok||!data.profile)throw new Error(data.error||"Unable to save your profile.");onComplete(data.profile)}catch(problem){setError(problem instanceof Error?problem.message:"Unable to save your profile.")}finally{setSaving(false)}};
-  return <main className="onboarding-shell"><div className="onboarding-brand"><span>✦</span><strong>SkillNova</strong><small>Account setup</small></div><form className="onboarding-card" onSubmit={submit}><div className="onboarding-progress"><span className="done">✓</span><i/><span className="active">2</span><i/><span>3</span></div><div className="auth-heading"><p>CREATE YOUR WORKSPACE</p><h1>Tell us how you use SkillNova</h1><span>This determines the window and tools you see after login.</span></div><div className="auth-role-grid"><button type="button" className={role==="candidate"?"active":""} onClick={()=>setRole("candidate")}><span className="auth-role-icon">C</span><strong>Candidate</strong><small>Build my verified talent profile</small><i>{role==="candidate"?"✓":""}</i></button><button type="button" className={role==="recruiter"?"active":""} onClick={()=>setRole("recruiter")}><span className="auth-role-icon">R</span><strong>Recruiter</strong><small>Discover and evaluate talent</small><i>{role==="recruiter"?"✓":""}</i></button></div><div className="onboarding-fields"><label><span>Full name</span><input required value={displayName} onChange={event=>setDisplayName(event.target.value)}/></label><label><span>{role==="candidate"?"Target role":"Job title"}</span><input required={role==="candidate"} value={professionalTitle} onChange={event=>setProfessionalTitle(event.target.value)} placeholder={role==="candidate"?"e.g. AI Product Engineer":"e.g. Technical Recruiter"}/></label>{role==="candidate"&&<label><span>Experience (years)</span><input type="number" min="0" max="50" value={experienceYears} onChange={event=>setExperienceYears(Number(event.target.value))}/></label>}<label><span>Location</span><input value={location} onChange={event=>setLocation(event.target.value)} placeholder="e.g. Bengaluru"/></label>{role==="candidate"&&<label className="wide"><span>GitHub username <small>optional</small></span><input value={githubUsername} onChange={event=>setGithubUsername(event.target.value)} placeholder="your-username"/></label>}<label className="wide"><span>Secure account email</span><input value={user.email} readOnly/></label></div>{error&&<div className="onboarding-error">{error}</div>}<button className="auth-primary button" disabled={saving}>{saving?"Creating workspace…":`Create ${role} workspace`}<span>→</span></button><a className="onboarding-signout" href="/signout-with-chatgpt?return_to=/">Use a different account</a></form></main>
+  
+  const submit=async(event:FormEvent)=>{
+    event.preventDefault();
+    setSaving(true);
+    const profile: AccountProfile = {
+      userId: user.uid,
+      email: user.email || "",
+      displayName,
+      role,
+      professionalTitle,
+      experienceYears,
+      location,
+      githubUsername,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    localStorage.setItem(`profile_${user.uid}`, JSON.stringify(profile));
+    onComplete(profile);
+    setSaving(false);
+  };
+  return <main className="onboarding-shell"><div className="onboarding-brand"><span>✦</span><strong>SkillNova</strong><small>Account setup</small></div><form className="onboarding-card" onSubmit={submit}><div className="onboarding-progress"><span className="done">✓</span><i/><span className="active">2</span><i/><span>3</span></div><div className="auth-heading"><p>CREATE YOUR WORKSPACE</p><h1>Tell us how you use SkillNova</h1><span>This determines the window and tools you see after login.</span></div><div className="auth-role-grid"><button type="button" className={role==="candidate"?"active":""} onClick={()=>setRole("candidate")}><span className="auth-role-icon">C</span><strong>Candidate</strong><small>Build my verified talent profile</small><i>{role==="candidate"?"✓":""}</i></button><button type="button" className={role==="recruiter"?"active":""} onClick={()=>setRole("recruiter")}><span className="auth-role-icon">R</span><strong>Recruiter</strong><small>Discover and evaluate talent</small><i>{role==="recruiter"?"✓":""}</i></button></div><div className="onboarding-fields"><label><span>Full name</span><input required value={displayName} onChange={event=>setDisplayName(event.target.value)}/></label><label><span>{role==="candidate"?"Target role":"Job title"}</span><input required={role==="candidate"} value={professionalTitle} onChange={event=>setProfessionalTitle(event.target.value)} placeholder={role==="candidate"?"e.g. AI Product Engineer":"e.g. Technical Recruiter"}/></label>{role==="candidate"&&<label><span>Experience (years)</span><input type="number" min="0" max="50" value={experienceYears} onChange={event=>setExperienceYears(Number(event.target.value))}/></label>}<label><span>Location</span><input value={location} onChange={event=>setLocation(event.target.value)} placeholder="e.g. Bengaluru"/></label>{role==="candidate"&&<label className="wide"><span>GitHub username <small>optional</small></span><input value={githubUsername} onChange={event=>setGithubUsername(event.target.value)} placeholder="your-username"/></label>}<label className="wide"><span>Secure account email</span><input value={user.email||""} readOnly/></label></div><button className="auth-primary button" disabled={saving}>{saving?"Creating workspace…":`Create ${role} workspace`}<span>→</span></button><button type="button" className="onboarding-signout" onClick={() => signOut(auth)}>Sign out</button></form></main>
 }
 
 function localPreviewProfile(role:AccountRole):AccountProfile{return {userId:`preview-${role}`,email:`${role}@skillnova.demo`,displayName:role==="candidate"?"Ananya Verma":"Darshan Patel",role,professionalTitle:role==="candidate"?"AI Product Engineer":"Technical Recruiter",experienceYears:role==="candidate"?3:5,location:"Bengaluru",githubUsername:role==="candidate"?"darshanbawaskar":"",createdAt:Date.now(),updatedAt:Date.now()}}
 
 export default function Home(){
-  const [session,setSession]=useState<SessionResponse|null>(null);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [profile, setProfile] = useState<AccountProfile | null>(null);
+  const [loading, setLoading] = useState(true);
   const [preview,setPreview]=useState<AccountProfile|null>(null);
-  useEffect(()=>{let active=true;fetch("/api/session").then(async response=>await response.json() as SessionResponse).then(data=>{if(active)setSession(data)}).catch(()=>{if(active)setSession({authenticated:false,user:null,profile:null})});return()=>{active=false}},[]);
-  if(preview)return preview.role==="candidate"?<CandidateDashboard profile={preview}/>:<RecruiterWorkspace profile={preview}/>;
-  if(!session)return <main className="auth-loading"><div><span>✦</span><strong>SkillNova</strong><small>Connecting your talent workspace…</small></div></main>;
-  if(!session.authenticated||!session.user)return <AuthScreen onPreview={(role)=>setPreview(localPreviewProfile(role))}/>;
-  if(!session.profile)return <RegistrationScreen user={session.user} onComplete={(profile)=>setSession(current=>current?{...current,profile}:current)}/>;
-  return session.profile.role==="candidate"?<CandidateDashboard profile={session.profile}/>:<RecruiterWorkspace profile={session.profile}/>;
+  
+  useEffect(()=>{
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        const storedProfile = localStorage.getItem(`profile_${firebaseUser.uid}`);
+        if (storedProfile) {
+          setProfile(JSON.parse(storedProfile));
+        } else {
+          setProfile(null);
+        }
+      } else {
+        setProfile(null);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  },[]);
+  
+  const handleLogout = async () => {
+    await signOut(auth);
+    setPreview(null);
+    setProfile(null);
+  };
+  
+  if(preview)return preview.role==="candidate"?<CandidateDashboard profile={preview} onLogout={() => setPreview(null)}/>:<RecruiterWorkspace profile={preview} onLogout={() => setPreview(null)}/>;
+  if(loading)return <main className="auth-loading"><div><span>✦</span><strong>SkillNova</strong><small>Connecting your talent workspace…</small></div></main>;
+  if(!user)return <AuthScreen onPreview={(role)=>setPreview(localPreviewProfile(role))} onLogin={setUser}/>;
+  if(!profile)return <RegistrationScreen user={user} onComplete={setProfile}/>;
+  return profile.role==="candidate"?<CandidateDashboard profile={profile} onLogout={handleLogout}/>:<RecruiterWorkspace profile={profile} onLogout={handleLogout}/>;
 }
