@@ -271,6 +271,80 @@ export function mergeLiveCandidate(base: Candidate, resume: ResumeSignals | null
   return { ...updated, score: calculateTalentScore(updated) };
 }
 
+export function mergeBackendCandidate(base: Candidate, resData: any): Candidate {
+  const resume = resData.resume_analysis || {};
+  const github = resData.github_analysis || {};
+  const stats = github.raw_stats || {};
+
+  // Map Backend Skills + Citations to SkillSignals
+  const mappedSkills: SkillSignal[] = [];
+  const backendSkills = resume.skills || [];
+  const existingSkills = new Map(base.skills.map(s => [s.name.toLowerCase(), s]));
+  
+  for (const skillName of backendSkills) {
+    const existing = existingSkills.get(skillName.toLowerCase());
+    const level = existing ? existing.level : clamp(resume.skills_score || 70, 60, 95);
+    
+    // Find citations related to this skill
+    const sources = ["LLM Evidence Extraction"];
+    if (resume.citations) {
+      for (const citation of resume.citations) {
+        if (citation.claim.toLowerCase().includes(skillName.toLowerCase()) || 
+            citation.evidence.toLowerCase().includes(skillName.toLowerCase())) {
+          sources.push(`"${citation.evidence}"`);
+        }
+      }
+    }
+    mappedSkills.push({ name: skillName, level, verified: true, sources: [...new Set(sources)] });
+  }
+
+  // Create base candidate from backend data
+  const updated: CandidateBase = {
+    ...base,
+    id: `live-${resData.github_username || base.id}`,
+    summary: resume.summary || base.summary,
+    experience: resume.experience_years || base.experience,
+    skills: mappedSkills.length > 0 ? mappedSkills : base.skills,
+    resume: {
+      ...base.resume,
+      education: resume.education || base.resume.education,
+      projects: resume.projects_count || base.resume.projects,
+    },
+    github: {
+      username: resData.github_username || base.github.username,
+      repos: stats.total_public_repos || base.github.repos,
+      stars: stats.total_stars_earned || base.github.stars,
+      commits: stats.recent_activity ? Object.values(stats.recent_activity).reduce((a:any, b:any) => a + b, 0) as number : base.github.commits,
+      pullRequests: base.github.pullRequests, // usually not in raw_stats unless explicitly fetched
+      activeWeeks: stats.recent_activity ? Object.keys(stats.recent_activity).length : base.github.activeWeeks,
+      languages: github.languages || base.github.languages,
+      tests: github.quality_score || base.github.tests,
+      documentation: github.documentation_score || base.github.documentation,
+      originality: github.originality_score || base.github.originality,
+    },
+    source: "live"
+  };
+
+  // We still use our local `calculateTalentScore` to generate the 7 dimensions, 
+  // but they will now be based on the real LLM-extracted numbers!
+  const calculated = calculateTalentScore(updated);
+  
+  // Override confidence and totals using the strict LLM outputs if available
+  const finalScore: TalentScore = {
+    ...calculated,
+    confidence: resume.confidence_score || github.confidence_score || calculated.confidence,
+    total: resData.scores_summary?.combined_total_score || calculated.total,
+    dimensions: {
+      ...calculated.dimensions,
+      coding: github.quality_score || resume.skills_score || calculated.dimensions.coding,
+      consistency: github.consistency_score || calculated.dimensions.consistency,
+      community: github.community_engagement_score || calculated.dimensions.community,
+    }
+  };
+
+  return { ...updated, score: finalScore };
+}
+
 export function getAuthenticityScore(candidate: Candidate): number {
   return clamp(candidate.trust.identity * 0.28 + candidate.trust.resumeConsistency * 0.3 + candidate.trust.repoAuthenticity * 0.32 + (100 - candidate.trust.duplicateRisk) * 0.1);
 }
