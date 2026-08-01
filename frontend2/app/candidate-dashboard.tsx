@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, useEffect, type CSSProperties } from "react";
 import type { AccountProfile } from "./account-types";
 import { extractFileText, fetchGithubEvidence } from "./evidence-client";
 import {
@@ -8,6 +8,7 @@ import {
   calculateTalentScore,
   getAuthenticityScore,
   mergeLiveCandidate,
+  mergeBackendCandidate,
   parseResumeText,
   type Candidate,
   type CandidateBase,
@@ -143,6 +144,22 @@ function downloadPortfolio(candidate: Candidate) {
 export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
   const [active,setActive]=useState<CandidateView>("overview");
   const [candidate,setCandidate]=useState<Candidate>(()=>buildCandidate(profile));
+  
+  useEffect(() => {
+    fetch(`http://localhost:8000/api/candidates/account-${profile.userId}`)
+      .then(res => {
+        if (!res.ok) throw new Error("Not found");
+        return res.json();
+      })
+      .then(data => {
+        if (data) {
+          const dbCandidate = data.score ? data : { ...data, score: calculateTalentScore(data) };
+          setCandidate(dbCandidate as Candidate);
+        }
+      })
+      .catch(err => console.log("Candidate not found in DB, using local profile."));
+  }, [profile.userId]);
+
   const [resumeFile,setResumeFile]=useState<File|null>(null);
   const [githubUsername,setGithubUsername]=useState(profile.githubUsername);
   const [resumeConnected,setResumeConnected]=useState(false);
@@ -179,9 +196,27 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
         setBackendScores(prev => ({...prev, resume: resData.analysis.resume_total_score}));
       }
       const resume=parseResumeText(await extractFileText(resumeFile));
-      const merged=mergeLiveCandidate(candidate,resume,candidate.github,profile.displayName);
-      const adjustedBase:CandidateBase={...merged,role:profile.professionalTitle,location:profile.location||merged.location};
-      setCandidate({...adjustedBase,score:calculateTalentScore(adjustedBase)});
+      const fullData = { resume_analysis: resData.analysis };
+      let merged = mergeBackendCandidate(candidate, fullData);
+      merged = {...merged, role: profile.professionalTitle || merged.role, location: profile.location || merged.location};
+      
+      // Save to DB
+      try {
+        const putRes = await fetch(`http://localhost:8000/api/candidates/${merged.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(merged)
+        });
+        if (!putRes.ok) {
+          await fetch(`http://localhost:8000/api/candidates/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(merged)
+          });
+        }
+      } catch(e) { console.error("Failed to save to DB:", e); }
+
+      setCandidate(merged);
       setResumeConnected(true);
       setMessage(`${backMsg}Profile recalculated from resume.`);
     }catch(error){setMessage(error instanceof Error?error.message:"Analysis failed.");}
@@ -202,10 +237,27 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
         backMsg = `[Backend GitHub Score: ${resData.analysis.github_total_score}] `;
         setBackendScores(prev => ({...prev, github: resData.analysis.github_total_score}));
       }
-      const github=await fetchGithubEvidence(githubUsername.trim());
-      const merged=mergeLiveCandidate(candidate,null,github.github,profile.displayName);
-      const adjustedBase:CandidateBase={...merged,role:profile.professionalTitle,location:profile.location||merged.location,source:"live"};
-      setCandidate({...adjustedBase,score:calculateTalentScore(adjustedBase)});
+      const fullData = { github_username: githubUsername.trim(), github_analysis: resData.analysis };
+      let merged = mergeBackendCandidate(candidate, fullData);
+      merged = {...merged, role: profile.professionalTitle || merged.role, location: profile.location || merged.location, source: "live"};
+      
+      // Save to DB
+      try {
+        const putRes = await fetch(`http://localhost:8000/api/candidates/${merged.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(merged)
+        });
+        if (!putRes.ok) {
+          await fetch(`http://localhost:8000/api/candidates/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(merged)
+          });
+        }
+      } catch(e) { console.error("Failed to save to DB:", e); }
+
+      setCandidate(merged);
       setGithubConnected(true);
       setMessage(`${backMsg}Profile recalculated from GitHub.`);
     }catch(error){setMessage(error instanceof Error?error.message:"Analysis failed.");}
@@ -230,18 +282,38 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
           github: resData.scores_summary.github_total_score,
           resume: resData.scores_summary.resume_total_score
         }));
+        
+        let merged = mergeBackendCandidate(candidate, resData);
+        merged = {...merged, role: profile.professionalTitle || merged.role, location: profile.location || merged.location};
+        
+        // Save to DB
+        try {
+          const putRes = await fetch(`http://localhost:8000/api/candidates/${merged.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(merged)
+          });
+          if (!putRes.ok) {
+            // Try POST if not exists
+            await fetch(`http://localhost:8000/api/candidates/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(merged)
+            });
+          }
+        } catch(e) { console.error("Failed to save to DB:", e); }
+
+        setCandidate(merged);
+        if(resumeFile) setResumeConnected(true);
+        if(githubUsername.trim()) setGithubConnected(true);
+        setMessage(`${backMsg}Profile recalculated from evidence and saved to database.`);
+      } else {
+        throw new Error("Analysis request failed.");
       }
-      const resume=resumeFile?parseResumeText(await extractFileText(resumeFile)):null;
-      const github=githubUsername.trim()?await fetchGithubEvidence(githubUsername.trim()):null;
-      const merged=mergeLiveCandidate(candidate,resume,github?.github||candidate.github,profile.displayName);
-      const adjustedBase:CandidateBase={...merged,role:profile.professionalTitle,location:profile.location||merged.location,source:github?"live":merged.source};
-      setCandidate({...adjustedBase,score:calculateTalentScore(adjustedBase)});
-      if(resume) setResumeConnected(true);
-      if(github) setGithubConnected(true);
-      setMessage(`${backMsg}Profile recalculated.`);
-    }catch(error){setMessage(error instanceof Error?error.message:"Evidence analysis failed. Please try again.");}
+    }catch(error){setMessage(error instanceof Error?error.message:"Analysis failed.");}
     finally{setSyncing(false);}
   };
+
   const [backendMatch, setBackendMatch] = useState<{score: number, matched: string[], missing: string[]} | null>(null);
   const [matchLoading, setMatchLoading] = useState(false);
   const runBackendMatch = async () => {

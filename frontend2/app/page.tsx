@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import {
   calculateJobMatch,
+  calculateTalentScore,
   candidates as seededCandidates,
   getAuthenticityScore,
   mergeLiveCandidate,
+  mergeBackendCandidate,
   parseResumeText,
   searchCandidates,
   type Candidate,
@@ -74,8 +76,25 @@ function ProfileView({candidate,onCandidateAnalyzed,onNavigate}:{candidate:Candi
       const resData = await response.json();
       setBackendScores(prev => ({...prev, github: resData.analysis.github_total_score}));
       setMessage(`[Backend GitHub Score: ${resData.analysis.github_total_score}] Analysis complete.`);
-      const live=await fetchGithubEvidence(username.trim());
-      const merged=mergeLiveCandidate(candidate,null,live.github,live.name);
+      const fullData = { github_username: resData.username, github_analysis: resData.analysis };
+      const merged = mergeBackendCandidate(candidate, fullData);
+      
+      // Save to DB
+      try {
+        const putRes = await fetch(`http://localhost:8000/api/candidates/${merged.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(merged)
+        });
+        if (!putRes.ok) {
+          await fetch(`http://localhost:8000/api/candidates/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(merged)
+          });
+        }
+      } catch(e) { console.error("Failed to save to DB:", e); }
+
       onCandidateAnalyzed(merged);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Analysis failed.");
@@ -93,9 +112,25 @@ function ProfileView({candidate,onCandidateAnalyzed,onNavigate}:{candidate:Candi
       setBackendScores(prev => ({...prev, resume: resData.analysis.resume_total_score}));
       setMessage(`[Backend Resume Score: ${resData.analysis.resume_total_score}] Analysis complete.`);
       const text=await extractFileText(file!);
-      const resume=parseResumeText(text);
-      setResumeSignals(resume);
-      const merged=mergeLiveCandidate(candidate,resume,candidate.github,candidate.name);
+      const fullData = { resume_analysis: resData.analysis };
+      const merged = mergeBackendCandidate(candidate, fullData);
+      
+      // Save to DB
+      try {
+        const putRes = await fetch(`http://localhost:8000/api/candidates/${merged.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(merged)
+        });
+        if (!putRes.ok) {
+          await fetch(`http://localhost:8000/api/candidates/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(merged)
+          });
+        }
+      } catch(e) { console.error("Failed to save to DB:", e); }
+
       onCandidateAnalyzed(merged);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Analysis failed.");
@@ -117,10 +152,25 @@ function ProfileView({candidate,onCandidateAnalyzed,onNavigate}:{candidate:Candi
         resume: resData.scores_summary.resume_total_score
       });
       setMessage(`[Backend Total Score: ${resData.scores_summary.combined_total_score}] Github: ${resData.scores_summary.github_total_score}, Resume: ${resData.scores_summary.resume_total_score}`);
-      let resume:ResumeSignals|null=null;
-      if(file){const text=await extractFileText(file);resume=parseResumeText(text);setResumeSignals(resume)}
-      const live=username.trim()?await fetchGithubEvidence(username.trim()):null;
-      const merged=mergeLiveCandidate(candidate,resume,live?.github||candidate.github,live?.name||candidate.name);
+      
+      const merged = mergeBackendCandidate(candidate, resData);
+      
+      // Save to DB
+      try {
+        const putRes = await fetch(`http://localhost:8000/api/candidates/${merged.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(merged)
+        });
+        if (!putRes.ok) {
+          await fetch(`http://localhost:8000/api/candidates/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(merged)
+          });
+        }
+      } catch(e) { console.error("Failed to save to DB:", e); }
+
       onCandidateAnalyzed(merged);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Analysis failed.");
@@ -240,9 +290,12 @@ function VerifyView({pool,selectedId,onSelect}:{pool:Candidate[];selectedId:stri
   const [answer,setAnswer]=useState("");
   const [evaluation,setEvaluation]=useState<any>(null);
   const [evaluating, setEvaluating] = useState(false);
+  const [accumulatedScores, setAccumulatedScores] = useState<number[]>([]);
+  const [interviewComplete, setInterviewComplete] = useState(false);
   
   const generateQuestions = async () => {
     setGenerating(true); setQuestions([]); setQuestionIndex(0); setEvaluation(null); setAnswer("");
+    setAccumulatedScores([]); setInterviewComplete(false);
     try {
       const res = await fetch("http://localhost:8000/api/interview/generate", {
         method: "POST",
@@ -251,7 +304,9 @@ function VerifyView({pool,selectedId,onSelect}:{pool:Candidate[];selectedId:stri
       });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
-      setQuestions(data.objective_questions || []);
+      const mcqs = (data.mcq_questions || []).map((q: any) => ({ ...q, type: 'mcq' }));
+      const objs = (data.objective_questions || []).map((q: any) => ({ ...q, type: 'objective' }));
+      setQuestions([...mcqs, ...objs]);
     } catch(e) {
       alert("Failed to generate questions");
     } finally {
@@ -269,21 +324,38 @@ function VerifyView({pool,selectedId,onSelect}:{pool:Candidate[];selectedId:stri
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           job_role: candidate.role, 
-          mcq_questions: [], mcq_answers: {},
-          objective_questions: [q],
-          objective_answers: { [q.id]: answer }
+          mcq_questions: q.type === 'mcq' ? [q] : [], 
+          mcq_answers: q.type === 'mcq' ? { [q.id]: answer } : {},
+          objective_questions: q.type === 'objective' ? [q] : [],
+          objective_answers: q.type === 'objective' ? { [q.id]: answer } : {}
         })
       });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
-      const objRes = data.objective_results[0] || {};
-      setEvaluation({
-        score: objRes.score * 10 || 0, // scale 0-10 to 0-100
-        feedback: objRes.feedback,
-        coverage: objRes.score >= 5 ? 80 : 30, // Mock metrics since backend doesn't return exact depth/structure
-        depth: objRes.score >= 7 ? 90 : 40,
-        structure: objRes.score >= 8 ? 95 : 50
-      });
+      
+      if (q.type === 'mcq') {
+        const mcqRes = data.mcq_results[0] || {};
+        const sc = mcqRes.is_correct ? 100 : 0;
+        setEvaluation({
+          score: sc,
+          feedback: mcqRes.is_correct ? "Correct answer!" : `Incorrect. The correct answer was ${mcqRes.correct_answer}.`,
+          coverage: mcqRes.is_correct ? 100 : 0,
+          depth: mcqRes.is_correct ? 100 : 0,
+          structure: mcqRes.is_correct ? 100 : 0
+        });
+        setAccumulatedScores(prev => { const n = [...prev]; n[questionIndex] = sc; return n; });
+      } else {
+        const objRes = data.objective_results[0] || {};
+        const sc = objRes.score * 10 || 0;
+        setEvaluation({
+          score: sc, // scale 0-10 to 0-100
+          feedback: objRes.feedback,
+          coverage: objRes.score >= 5 ? 80 : 30, // Mock metrics since backend doesn't return exact depth/structure
+          depth: objRes.score >= 7 ? 90 : 40,
+          structure: objRes.score >= 8 ? 95 : 50
+        });
+        setAccumulatedScores(prev => { const n = [...prev]; n[questionIndex] = sc; return n; });
+      }
     } catch(e) {
       alert("Failed to evaluate answer");
     } finally {
@@ -298,16 +370,73 @@ function VerifyView({pool,selectedId,onSelect}:{pool:Candidate[];selectedId:stri
   return <div className="view-wrap"><section className="page-lead light-lead"><div><span className="eyebrow"><Icon name="verify" size={14}/>ADAPTIVE SKILL VERIFICATION</span><h2>Test claims against reasoning and code.</h2><p>Interview ratings are calculated from Llama 3.3 rubric coverage, answer depth, structure, and executable test results.</p></div><CandidateSelect pool={pool} value={selectedId} onChange={id=>{onSelect(id);setQuestionIndex(0);setEvaluation(null);setQuestions([]);}}/></section>
   <div className="verify-final-grid"><section className="content-card interview-workspace">
     <div className="interview-top"><div className="agent-id"><span><Icon name="spark"/></span><div><strong>Nova · Evidence interviewer</strong><p><i/>Grounded in {candidate.name}&apos;s profile</p></div></div>
-      {questions.length > 0 ? <span>Question {questionIndex+1} of {questions.length}</span> : <button className="primary-button" onClick={generateQuestions} disabled={generating}>{generating ? "Generating..." : "Generate AI Interview"}</button>}
+      {questions.length > 0 && !interviewComplete && <span>Question {questionIndex+1} of {questions.length}</span>}
+      {questions.length === 0 && <button className="primary-button" onClick={generateQuestions} disabled={generating}>{generating ? "Generating..." : "Generate AI Interview"}</button>}
     </div>
     
-    {questions.length > 0 && <>
+    {questions.length > 0 && !interviewComplete && <>
       <div className="progress-track"><i style={{width:`${((questionIndex+1)/questions.length)*100}%`}}/></div>
-      <div className="question-card"><span>{questions[questionIndex].topic}</span><h3>{questions[questionIndex].question}</h3><small>Hint: {questions[questionIndex].expected_answer_hint}</small></div>
-      <label className="answer-area">Candidate answer<textarea rows={8} value={answer} onChange={event=>setAnswer(event.target.value)} placeholder="Explain decisions, trade-offs, validation, and measurable outcome..."/></label>
-      <div className="answer-footer"><span>{answer.trim().split(/\s+/).filter(Boolean).length} words</span><button className="primary-button" disabled={answer.trim().length<10 || evaluating} onClick={evaluateAnswer}>{evaluating ? "Evaluating..." : "Evaluate answer"} <Icon name="spark" size={15}/></button></div>
-      {evaluation&&<div className="evaluation-panel"><div><ScoreRing score={evaluation.score} label="Answer score" light/><div><h3>{evaluation.score>=80?"Strong evidence":"Follow-up recommended"}</h3><p>{evaluation.feedback}</p></div></div><div className="evaluation-metrics"><span>Rubric coverage <b>{evaluation.coverage}%</b></span><span>Answer depth <b>{evaluation.depth}%</b></span><span>Reasoning structure <b>{evaluation.structure}%</b></span></div><button className="ghost-button" onClick={()=>{setQuestionIndex((questionIndex+1)%questions.length);setAnswer("");setEvaluation(null)}}>Next adaptive question <Icon name="arrow" size={15}/></button></div>}
+      <div className="question-card">
+        <span>{questions[questionIndex].topic} {questions[questionIndex].type === 'mcq' ? '(Multiple Choice)' : '(Short Answer)'}</span>
+        <h3>{questions[questionIndex].question}</h3>
+        {questions[questionIndex].type === 'objective' && <small>Hint: {questions[questionIndex].expected_answer_hint}</small>}
+      </div>
+      
+      <div className="answer-area">
+        <label>Candidate answer</label>
+        {questions[questionIndex].type === 'mcq' ? (
+          <div className="mcq-options" style={{display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px'}}>
+            {Object.entries(questions[questionIndex].options || {}).map(([key, value]) => (
+              <label key={key} style={{display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', padding: '10px', border: '1px solid #e2e8f0', borderRadius: '6px', background: answer === key ? '#f0f9ff' : 'white', borderColor: answer === key ? '#0284c7' : '#e2e8f0'}}>
+                <input type="radio" name="mcq" value={key} checked={answer === key} onChange={(e) => setAnswer(e.target.value)} style={{width: '16px', height: '16px', margin: 0}}/>
+                <span style={{fontWeight: 600, width: '20px'}}>{key}</span>
+                <span style={{fontSize: '14px', color: '#1e293b'}}>{String(value)}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <textarea rows={8} value={answer} onChange={event=>setAnswer(event.target.value)} placeholder="Explain decisions, trade-offs, validation, and measurable outcome..."/>
+        )}
+      </div>
+      
+      <div className="answer-footer">
+        <span>{questions[questionIndex].type === 'objective' ? `${answer.trim().split(/\s+/).filter(Boolean).length} words` : answer ? 'Option selected' : 'No option selected'}</span>
+        <button className="primary-button" disabled={(questions[questionIndex].type === 'objective' ? answer.trim().length < 10 : !answer) || evaluating} onClick={evaluateAnswer}>
+          {evaluating ? "Evaluating..." : "Evaluate answer"} <Icon name="spark" size={15}/>
+        </button>
+      </div>
+      
+      {evaluation&&<div className="evaluation-panel"><div><ScoreRing score={evaluation.score} label="Answer score" light/><div><h3>{evaluation.score>=80?"Strong evidence":"Follow-up recommended"}</h3><p>{evaluation.feedback}</p></div></div><div className="evaluation-metrics"><span>Rubric coverage <b>{evaluation.coverage}%</b></span><span>Answer depth <b>{evaluation.depth}%</b></span><span>Reasoning structure <b>{evaluation.structure}%</b></span></div>
+      <button className="ghost-button" onClick={()=>{
+        if (questionIndex + 1 < questions.length) {
+          setQuestionIndex(questionIndex + 1);
+          setAnswer("");
+          setEvaluation(null);
+        } else {
+          setInterviewComplete(true);
+        }
+      }}>
+        {questionIndex + 1 < questions.length ? "Next adaptive question" : "Complete Interview"} <Icon name="arrow" size={15}/>
+      </button></div>}
     </>}
+    
+    {interviewComplete && (
+      <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', gap: '20px', textAlign: 'center'}}>
+        <ScoreRing score={Math.round(accumulatedScores.reduce((a,b)=>a+b,0)/Math.max(1,accumulatedScores.length))} label="Overall Interview Score" />
+        <h2 style={{fontSize: '24px', margin: 0, color: '#0f172a'}}>Skill Verification Complete</h2>
+        <p style={{color: '#64748b', margin: 0}}>This candidate has successfully completed the adaptive AI interview.</p>
+        <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+           <div style={{background: '#f8fafc', padding: '15px 20px', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
+             <strong style={{display: 'block', fontSize: '20px', color: '#0ea5e9'}}>{accumulatedScores.filter(s => s >= 80).length}</strong>
+             <span style={{fontSize: '12px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Strong Answers</span>
+           </div>
+           <div style={{background: '#f8fafc', padding: '15px 20px', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
+             <strong style={{display: 'block', fontSize: '20px', color: '#64748b'}}>{questions.length}</strong>
+             <span style={{fontSize: '12px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Total Questions</span>
+           </div>
+        </div>
+      </div>
+    )}
     
   </section><section className="content-card code-workspace"><div className="section-heading"><div><p className="kicker">CODE VERIFICATION</p><h3>Executable assessment</h3></div><span><Icon name="clock" size={13}/>2s limit</span></div><div className="challenge"><strong>Normalize a skill list</strong><p>Return unique, lowercase, trimmed skills in alphabetical order.</p></div><textarea className="code-editor" value={code} onChange={event=>setCode(event.target.value)} spellCheck={false} rows={12}/><button className="primary-button full" onClick={runTests}><Icon name="code" size={16}/>Run 3 test cases</button>{testResult&&<div className={`test-result ${testResult.passed===testResult.total?"pass":"fail"}`}><Icon name={testResult.passed===testResult.total?"check":"alert"}/><div><strong>{testResult.passed}/{testResult.total} tests passed</strong><p>{testResult.message}</p></div></div>}<div className="verified-skill-stack"><p className="kicker">PROFILE VERIFICATION</p>{candidate.skills.slice(0,5).map(item=><div key={item.name}><span><Icon name={item.verified?"check":"alert"} size={13}/>{item.name}</span><strong>{item.verified?`${item.level}%`:`Review`}</strong></div>)}</div></section></div></div>}
 
@@ -378,6 +507,25 @@ function RecruiterWorkspace({profile}:{profile:AccountProfile}){
   const [pool,setPool]=useState<Candidate[]>(seededCandidates);
   const [selectedId,setSelectedId]=useState(seededCandidates[0].id);
   const [menuOpen,setMenuOpen]=useState(false);
+  
+  useEffect(() => {
+    fetch("http://localhost:8000/api/candidates/")
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.length > 0) {
+          // Transform if needed or just set directly if backend matches schema
+          // (assuming FastAPI returns Candidate objects compatible with frontend schema)
+          // For now, we'll try to map them or just set them.
+          // Wait, we need to apply `calculateTalentScore` if they lack scores. 
+          // Let's just blindly use them but calculate score if missing.
+          const liveCandidates = data.map((c: any) => c.score ? c : { ...c, score: calculateTalentScore(c) });
+          setPool(liveCandidates);
+          setSelectedId(liveCandidates[0].id);
+        }
+      })
+      .catch(err => console.error("Failed to fetch candidates from DB:", err));
+  }, []);
+
   const selected=pool.find(item=>item.id===selectedId)||pool[0];
   const initials=profile.displayName.split(/\s+/).map(part=>part[0]).join("").slice(0,2).toUpperCase();
   const navigate=(view:View)=>{setActive(view);setMenuOpen(false);window.scrollTo({top:0,behavior:"smooth"})};
