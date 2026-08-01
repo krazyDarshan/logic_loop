@@ -13,7 +13,7 @@ async def analyze_resume(
     job_role: Optional[str] = Form(None),
     keywords: Optional[str] = Form(None)
 ):
-    if not file.filename.endswith('.pdf'):
+    if not file.filename.endswith('.pdf' or '.docx'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
         
     try:

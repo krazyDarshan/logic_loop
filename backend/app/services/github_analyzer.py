@@ -12,7 +12,7 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY", "dummy"))
 GITHUB_HEADERS = {"Accept": "application/vnd.github.v3+json"}
 token = os.getenv("GITHUB_TOKEN")
 if token:
-    GITHUB_HEADERS["Authorization"] = f"token {token}"
+    GITHUB_HEADERS["Authorization"] = f"Bearer {token}"
 
 
 def fetch_github_profile(username: str) -> Optional[Dict[str, Any]]:

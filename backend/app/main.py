@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import analyze, candidates, interview, matchmaker, hackathon
 from app.db.database import engine, Base
 
-# Create DB tables (Gracefully handle dummy connection strings)
 try:
     Base.metadata.create_all(bind=engine)
 except Exception as e:

@@ -23,3 +23,24 @@ def create_candidate(cand: candidate.CandidateCreate, db: Session = Depends(get_
     db.commit()
     db.refresh(new_cand)
     return new_cand
+
+@router.get("/{id}", response_model=candidate.CandidateResponse)
+def get_candidate(id: str, db: Session = Depends(get_db)):
+    db_cand = db.query(models.Candidate).filter(models.Candidate.id == id).first()
+    if not db_cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    return db_cand
+
+@router.put("/{id}", response_model=candidate.CandidateResponse)
+def update_candidate(id: str, cand_update: dict, db: Session = Depends(get_db)):
+    db_cand = db.query(models.Candidate).filter(models.Candidate.id == id).first()
+    if not db_cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    
+    for key, value in cand_update.items():
+        setattr(db_cand, key, value)
+        
+    db.commit()
+    db.refresh(db_cand)
+    return db_cand
+
