@@ -18,7 +18,7 @@ import { extractFileText, fetchGithubEvidence } from "./evidence-client";
 import { CandidateDashboard } from "./candidate-dashboard";
 import type { AccountProfile, AccountRole, AuthenticatedUser, SessionResponse } from "./account-types";
 
-type View = "profile" | "verify" | "hackathon" | "recruiter" | "trust" | "createjob";
+type View = "profile" | "verify" | "hackathon" | "recruiter" | "trust" | "jobs";
 type IconName = "spark" | "profile" | "match" | "verify" | "trophy" | "people" | "github" | "file" | "arrow" | "check" | "search" | "briefcase" | "menu" | "close" | "shield" | "code" | "clock" | "download" | "compare" | "database" | "alert";
 
 const iconPaths: Record<IconName, ReactNode> = {
@@ -40,7 +40,7 @@ function Icon({name,size=20}:{name:IconName;size?:number}){return <svg aria-hidd
 const clamp=(value:number)=>Math.round(Math.min(100,Math.max(0,value)));
 
 const navItems:{id:View;label:string;icon:IconName;eyebrow:string}[]=[
-  {id:"profile",label:"Talent Intelligence",icon:"profile",eyebrow:"Analyze"},{id:"verify",label:"Skill Verification",icon:"verify",eyebrow:"Validate"},{id:"hackathon",label:"Hackathon Hiring",icon:"trophy",eyebrow:"Discover"},{id:"recruiter",label:"Recruiter Workspace",icon:"people",eyebrow:"Decide"},{id:"trust",label:"Trust Center",icon:"shield",eyebrow:"Govern"},{id:"createjob",label:"Create Job",icon:"file",eyebrow:"Define"},
+  {id:"profile",label:"Talent Intelligence",icon:"profile",eyebrow:"Analyze"},{id:"verify",label:"Skill Verification",icon:"verify",eyebrow:"Validate"},{id:"hackathon",label:"Hackathon Hiring",icon:"trophy",eyebrow:"Discover"},{id:"recruiter",label:"Recruiter Workspace",icon:"people",eyebrow:"Decide"},{id:"trust",label:"Trust Center",icon:"shield",eyebrow:"Govern"},{id:"jobs",label:"Jobs & Applications",icon:"briefcase",eyebrow:"Manage"},
 ];
 
 const dimensions:[keyof Candidate["score"]["dimensions"],string,number][]=[
@@ -502,6 +502,102 @@ function RecruiterView({pool,selectedId,onSelect}:{pool:Candidate[];selectedId:s
 
 function TrustView({pool,selectedId,onSelect}:{pool:Candidate[];selectedId:string;onSelect:(id:string)=>void}){const candidate=pool.find(item=>item.id===selectedId)||pool[0];const authenticity=getAuthenticityScore(candidate);const [controls,setControls]=useState({humanReview:true,piiRedaction:true,auditLog:true,protectedTraits:true});return <div className="view-wrap"><section className="page-lead light-lead"><div><span className="eyebrow"><Icon name="shield" size={14}/>TRUST & GOVERNANCE</span><h2>Make AI assistance accountable.</h2><p>Inspect authenticity, data provenance, fraud indicators, and the controls that keep a human responsible for every decision.</p></div><CandidateSelect pool={pool} value={selectedId} onChange={onSelect}/></section><div className="trust-grid"><section className="content-card trust-score-card"><div className="section-heading"><div><p className="kicker">AUTHENTICITY SCORE</p><h3>{candidate.name}</h3></div><ScoreRing score={authenticity} label="Authenticity" light/></div><p>Calculated from identity confidence, resume-to-repository consistency, repository originality, and duplicate risk.</p>{[["Identity confidence",candidate.trust.identity],["Resume consistency",candidate.trust.resumeConsistency],["Repository authenticity",candidate.trust.repoAuthenticity],["Duplicate safety",100-candidate.trust.duplicateRisk]].map(([label,value])=><div className="trust-factor" key={String(label)}><div><span>{label}</span><strong>{value}</strong></div><div className="bar"><i style={{width:`${value}%`}}/></div></div>)}</section><section className="content-card"><div className="section-heading"><div><p className="kicker">RESPONSIBLE AI CONTROLS</p><h3>Decision safeguards</h3></div><span>All local</span></div><div className="control-list">{[["humanReview","Human approval required","AI can recommend, never hire or reject."],["piiRedaction","PII redaction","Hide phone, email, address, age and photo."],["auditLog","Decision audit log","Record score inputs and recruiter actions."],["protectedTraits","Protected traits excluded","Never score gender, religion, caste, age or disability."]].map(([key,label,copy])=><label key={key}><button role="switch" aria-checked={controls[key as keyof typeof controls]} className={controls[key as keyof typeof controls]?"toggle on":"toggle"} onClick={()=>setControls(current=>({...current,[key]:!current[key as keyof typeof controls]}))}><i/></button><span><strong>{label}</strong><small>{copy}</small></span></label>)}</div></section><section className="content-card"><div className="section-heading"><div><p className="kicker">FRAUD RISK REPORT</p><h3>Automated checks</h3></div><span className="low-risk"><Icon name="check" size={13}/>Low risk</span></div><div className="fraud-checks">{[["Resume–GitHub consistency",candidate.trust.resumeConsistency,"Skills align with repository languages and activity."],["Original project ratio",candidate.github.originality,"Forks are excluded from project depth scoring."],["Duplicate profile risk",100-candidate.trust.duplicateRisk,"No high-similarity identity conflicts detected."],["Evidence freshness",Math.min(98,candidate.github.activeWeeks*2),`${candidate.github.activeWeeks} active contribution weeks detected.`]].map(([label,value,copy])=><div key={String(label)}><span className={Number(value)>=80?"check-icon":"warn-icon"}><Icon name={Number(value)>=80?"check":"alert"} size={14}/></span><div><strong>{label}</strong><p>{copy}</p></div><b>{value}</b></div>)}</div></section><section className="content-card"><div className="section-heading"><div><p className="kicker">DECISION AUDIT</p><h3>Traceable activity</h3></div><span>Current session</span></div><div className="audit-timeline">{[["Talent score calculated",`${candidate.score.evidenceCount} evidence signals · formula v1.0`],["Authenticity checks completed",`Score ${authenticity}/100 · duplicate risk ${candidate.trust.duplicateRisk}%`],["Protected traits excluded","Only job-relevant technical evidence used"],["Human review pending","Recruiter must approve any final decision"]].map(([title,copy],index)=><div key={title}><span>{index+1}</span><div><strong>{title}</strong><p>{copy}</p></div></div>)}</div></section></div></div>}
 
+function JobsView() {
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [newJob, setNewJob] = useState({ title: '', company: 'LogicLoop', location: '', mode: 'Remote', salary: '', description: '' });
+  const [selectedJob, setSelectedJob] = useState<string|null>(null);
+  const [applications, setApplications] = useState<any[]>([]);
+  
+  useEffect(() => {
+    fetch("http://localhost:8000/api/jobs/").then(res => res.json()).then(setJobs);
+  }, []);
+  
+  useEffect(() => {
+    if (selectedJob) {
+      fetch(`http://localhost:8000/api/jobs/${selectedJob}/applications`).then(res => res.json()).then(setApplications);
+    } else {
+      setApplications([]);
+    }
+  }, [selectedJob]);
+
+  const handleCreate = async () => {
+    if (!newJob.title || !newJob.description) return alert("Title and Description required");
+    const res = await fetch("http://localhost:8000/api/jobs/", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newJob)
+    });
+    if (res.ok) {
+      setJobs([...jobs, await res.json()]);
+      setCreating(false);
+      setNewJob({ title: '', company: 'LogicLoop', location: '', mode: 'Remote', salary: '', description: '' });
+    }
+  };
+
+  return <div className="view-wrap">
+    <section className="page-lead light-lead">
+      <div><span className="eyebrow"><Icon name="briefcase" size={14}/>JOB MANAGEMENT</span><h2>Manage Jobs & Applications.</h2><p>Create dynamic roles for AI matchmaking and review candidate applications with verified ML scores.</p></div>
+      <button className="primary-button" onClick={() => setCreating(true)}><Icon name="file" size={16}/>Create New Job</button>
+    </section>
+    
+    {creating && (
+      <section className="content-card">
+        <h3>Create New Job</h3>
+        <div style={{display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '15px'}}>
+          <input type="text" placeholder="Job Title (e.g. AI Product Engineer)" value={newJob.title} onChange={e => setNewJob({...newJob, title: e.target.value})} style={{padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1'}} />
+          <input type="text" placeholder="Location" value={newJob.location} onChange={e => setNewJob({...newJob, location: e.target.value})} style={{padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1'}} />
+          <input type="text" placeholder="Salary Range" value={newJob.salary} onChange={e => setNewJob({...newJob, salary: e.target.value})} style={{padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1'}} />
+          <textarea rows={5} placeholder="Job Description & Requirements..." value={newJob.description} onChange={e => setNewJob({...newJob, description: e.target.value})} style={{padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1'}} />
+          <div style={{display: 'flex', gap: '10px'}}>
+            <button className="primary-button" onClick={handleCreate}>Publish Job</button>
+            <button className="ghost-button" onClick={() => setCreating(false)}>Cancel</button>
+          </div>
+        </div>
+      </section>
+    )}
+
+    <div style={{display: 'flex', gap: '20px', marginTop: '20px'}}>
+      <div style={{flex: 1, display: 'flex', flexDirection: 'column', gap: '15px'}}>
+        {jobs.map(job => (
+          <div key={job.id} onClick={() => setSelectedJob(job.id)} className="content-card" style={{cursor: 'pointer', border: selectedJob === job.id ? '2px solid #0284c7' : '1px solid #e2e8f0', background: selectedJob === job.id ? '#f0f9ff' : 'white'}}>
+            <h4 style={{margin: '0 0 5px'}}>{job.title}</h4>
+            <p style={{margin: '0', fontSize: '13px', color: '#64748b'}}>{job.location} · {job.salary}</p>
+          </div>
+        ))}
+        {jobs.length === 0 && <p>No jobs found.</p>}
+      </div>
+      
+      <div style={{flex: 2}}>
+        {selectedJob ? (
+          <section className="content-card">
+            <h3>Applications</h3>
+            {applications.length > 0 ? (
+              <div className="table-wrap"><table style={{width: '100%', borderCollapse: 'collapse', marginTop: '10px'}}>
+                <thead><tr style={{textAlign: 'left', borderBottom: '1px solid #e2e8f0'}}><th style={{padding: '10px'}}>Candidate</th><th style={{padding: '10px'}}>Match Score</th><th style={{padding: '10px'}}>Links</th></tr></thead>
+                <tbody>
+                  {applications.map(app => (
+                    <tr key={app.id} style={{borderBottom: '1px solid #e2e8f0'}}>
+                      <td style={{padding: '10px'}}><strong>{app.candidate.name}</strong><br/><small>{app.candidate.email}</small></td>
+                      <td style={{padding: '10px'}}>{app.match_score ? `${app.match_score}%` : 'N/A'}</td>
+                      <td style={{padding: '10px'}}>
+                        {app.resume_url && <a href={app.resume_url} target="_blank" style={{color: '#0284c7', marginRight: '10px'}}>Resume</a>}
+                        {app.github_link && <a href={app.github_link} target="_blank" style={{color: '#0284c7'}}>GitHub</a>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table></div>
+            ) : <p>No applications yet.</p>}
+          </section>
+        ) : (
+          <div className="content-card" style={{textAlign: 'center', color: '#64748b', padding: '40px'}}>
+            Select a job to view its applications.
+          </div>
+        )}
+      </div>
+    </div>
+  </div>;
+}
+
 function RecruiterWorkspace({profile}:{profile:AccountProfile}){
   const [active,setActive]=useState<View>("recruiter");
   const [pool,setPool]=useState<Candidate[]>(seededCandidates);
@@ -530,7 +626,7 @@ function RecruiterWorkspace({profile}:{profile:AccountProfile}){
   const initials=profile.displayName.split(/\s+/).map(part=>part[0]).join("").slice(0,2).toUpperCase();
   const navigate=(view:View)=>{setActive(view);setMenuOpen(false);window.scrollTo({top:0,behavior:"smooth"})};
   const handleAnalyzed=(candidate:Candidate)=>{setPool(current=>[candidate,...current.filter(item=>!item.id.startsWith("live-")&&item.id!==candidate.id)]);setSelectedId(candidate.id)};
-  return <main className="app-shell"><aside className={`sidebar ${menuOpen?"open":""}`}><div className="brand"><span className="brand-mark"><Icon name="spark" size={18}/></span><div><strong>SkillNova</strong><small>Evidence-led hiring</small></div><button className="icon-button close-menu" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"><Icon name="close"/></button></div><nav><p className="nav-label">INTELLIGENCE WORKSPACE</p>{navItems.map(item=><button key={item.id} className={active===item.id?"active":""} onClick={()=>navigate(item.id)}><span className="nav-icon"><Icon name={item.icon}/></span><span><small>{item.eyebrow}</small>{item.label}</span>{active===item.id&&<i/>}</button>)}</nav><div className="engine-card"><span><i/>Live engine</span><strong>{pool.length} candidates</strong><small>Transparent scoring · v1.1</small></div><div className="sidebar-user"><span className="small-avatar">{initials}</span><div><strong>{profile.displayName}</strong><small>Recruiter workspace</small></div><span className="online-dot"/></div></aside>{menuOpen&&<button className="sidebar-overlay" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"/>}<section className="main-stage"><AppHeader active={active} onMenu={()=>setMenuOpen(true)} initials={initials}/>{active==="profile"&&<ProfileView candidate={selected} onCandidateAnalyzed={handleAnalyzed} onNavigate={navigate}/>} {active==="createjob"&&<CreateJobView/>} {active==="verify"&&<VerifyView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="hackathon"&&<HackathonView pool={pool} onSelect={setSelectedId} onNavigate={navigate}/>} {active==="recruiter"&&<RecruiterView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="trust"&&<TrustView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>}<footer><span><strong>SkillNova</strong> · Proof over paperwork.</span><span>Decision support only · Human approval required</span></footer></section></main>
+  return <main className="app-shell"><aside className={`sidebar ${menuOpen?"open":""}`}><div className="brand"><span className="brand-mark"><Icon name="spark" size={18}/></span><div><strong>SkillNova</strong><small>Evidence-led hiring</small></div><button className="icon-button close-menu" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"><Icon name="close"/></button></div><nav><p className="nav-label">INTELLIGENCE WORKSPACE</p>{navItems.map(item=><button key={item.id} className={active===item.id?"active":""} onClick={()=>navigate(item.id)}><span className="nav-icon"><Icon name={item.icon}/></span><span><small>{item.eyebrow}</small>{item.label}</span>{active===item.id&&<i/>}</button>)}</nav><div className="engine-card"><span><i/>Live engine</span><strong>{pool.length} candidates</strong><small>Transparent scoring · v1.1</small></div><div className="sidebar-user"><span className="small-avatar">{initials}</span><div><strong>{profile.displayName}</strong><small>Recruiter workspace</small></div><span className="online-dot"/></div></aside>{menuOpen&&<button className="sidebar-overlay" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"/>}<section className="main-stage"><AppHeader active={active} onMenu={()=>setMenuOpen(true)} initials={initials}/>{active==="profile"&&<ProfileView candidate={selected} onCandidateAnalyzed={handleAnalyzed} onNavigate={navigate}/>} {active==="jobs"&&<JobsView/>} {active==="verify"&&<VerifyView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="hackathon"&&<HackathonView pool={pool} onSelect={setSelectedId} onNavigate={navigate}/>} {active==="recruiter"&&<RecruiterView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="trust"&&<TrustView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>}<footer><span><strong>SkillNova</strong> · Proof over paperwork.</span><span>Decision support only · Human approval required</span></footer></section></main>
 }
 
 function AuthScreen({onPreview}:{onPreview:(role:AccountRole)=>void}){

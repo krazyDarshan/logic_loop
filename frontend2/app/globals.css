@@ -316,6 +316,16 @@ body{background:#f7f9fb}
   to{opacity:1;transform:translateY(0) scale(1)}
 }
 
+@keyframes sn-back-enter{
+  from{opacity:0;transform:translateX(10px)}
+  to{opacity:1;transform:translateX(0)}
+}
+
+@keyframes sn-back-arrow{
+  0%,100%{transform:translateX(0)}
+  50%{transform:translateX(-3px)}
+}
+
 /* App and view entrances */
 .view-wrap,
 .candidate-page,
@@ -551,6 +561,86 @@ body{background:#f7f9fb}
   transition-duration:80ms;
 }
 
+/* Reusable visual-only back controls.
+   Add className="back-button" to a button or link when navigation is wired. */
+:where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button){
+  min-height:40px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  padding:0 14px 0 10px;
+  border:1px solid #cbd9e4;
+  border-radius:9px;
+  background:#fff;
+  color:#334e63;
+  box-shadow:0 4px 14px #29475d0a;
+  font:700 10px/1 var(--font-sans),Arial,sans-serif;
+  letter-spacing:.015em;
+  text-decoration:none;
+  white-space:nowrap;
+  cursor:pointer;
+  animation:sn-back-enter 420ms var(--motion-ease) both;
+  transition:color var(--motion-fast) ease,
+             background-color var(--motion-fast) ease,
+             border-color var(--motion-fast) ease,
+             box-shadow var(--motion-base) ease,
+             transform var(--motion-fast) var(--motion-ease);
+}
+
+:where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button)::before{
+  content:"←";
+  width:24px;
+  height:24px;
+  display:grid;
+  place-items:center;
+  border-radius:7px;
+  background:#eaf2f8;
+  color:#35699e;
+  font-size:14px;
+  line-height:1;
+  transition:color var(--motion-fast) ease,
+             background-color var(--motion-fast) ease,
+             transform var(--motion-fast) var(--motion-spring);
+}
+
+@media(hover:hover) and (pointer:fine){
+  :where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button):hover{
+    color:#244d72;
+    background:#fafdff;
+    border-color:#9fb8cc;
+    box-shadow:0 9px 22px #29475d14;
+    transform:translateY(-2px);
+  }
+
+  :where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button):hover::before{
+    color:#fff;
+    background:#3b6fa8;
+    animation:sn-back-arrow 520ms var(--motion-ease);
+  }
+}
+
+:where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button):active{
+  transform:translateY(0) scale(.97);
+  box-shadow:0 2px 7px #29475d0d;
+  transition-duration:80ms;
+}
+
+:where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button):disabled,
+:where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button)[aria-disabled="true"]{
+  opacity:.52;
+  pointer-events:none;
+  box-shadow:none;
+}
+
+:where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button).floating{
+  position:fixed;
+  top:20px;
+  left:20px;
+  z-index:40;
+  box-shadow:0 12px 28px #29475d1a;
+}
+
 /* Input, upload, navigation, and table polish */
 .input-shell,
 .text-input,
@@ -685,6 +775,8 @@ body{background:#f7f9fb}
   .page-lead,
   .candidate-hero,
   .candidate-page-lead{animation-duration:460ms}
+  :where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button){min-height:42px;padding-right:13px}
+  :where(.back-button,.candidate-back-button,.recruiter-back-button,.auth-back-button).floating{top:12px;left:12px}
 }
 
 /* Respect operating-system accessibility settings. */

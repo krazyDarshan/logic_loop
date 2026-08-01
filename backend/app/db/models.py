@@ -87,3 +87,36 @@ class HackathonProject(Base):
 # SQL migration in schema.sql — HNSW option support in SQLAlchemy depends on
 # your installed pgvector-python version, so the migration is the reliable path.
 Index("idx_hackathon_projects_candidate_id", HackathonProject.candidate_id)
+
+class Job(Base):
+    __tablename__ = "jobs"
+    
+    id = Column(String(64), primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    company = Column(String(255), nullable=False)
+    location = Column(String(255))
+    mode = Column(String(50))
+    salary = Column(String(100))
+    description = Column(Text)
+    created_at = Column(TIMESTAMP(timezone=False), server_default=func.now())
+    
+    applications = relationship("JobApplication", back_populates="job", cascade="all, delete-orphan")
+
+
+class JobApplication(Base):
+    __tablename__ = "job_applications"
+    
+    id = Column(String(64), primary_key=True, index=True)
+    job_id = Column(String(64), ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    candidate_id = Column(String(64), ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    
+    resume_url = Column(String(500))
+    github_link = Column(String(500))
+    
+    status = Column(String(50), default="applied")
+    match_score = Column(Float)
+    
+    created_at = Column(TIMESTAMP(timezone=False), server_default=func.now())
+    
+    job = relationship("Job", back_populates="applications")
+    candidate = relationship("Candidate")

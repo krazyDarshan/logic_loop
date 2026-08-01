@@ -13,29 +13,13 @@ import {
   type Candidate,
   type CandidateBase,
   type JobMatch,
+  type JobOpening,
   type SkillSignal,
 } from "./talent-engine";
 
 type CandidateView = "overview" | "matches" | "gaps" | "verification" | "exports";
 
-type JobOpening = {
-  id: string;
-  company: string;
-  title: string;
-  location: string;
-  mode: string;
-  salary: string;
-  description: string;
-};
 
-const jobs: JobOpening[] = [
-  { id:"nimbus-ai",company:"Nimbus AI",title:"AI Product Engineer",location:"Bengaluru",mode:"Hybrid",salary:"₹18–26 LPA",description:"AI Product Engineer with 2+ years of experience building Python, React, FastAPI, LangGraph, PostgreSQL and Docker products. Strong GenAI, RAG, testing and cross-functional product delivery." },
-  { id:"orbit-stack",company:"OrbitStack",title:"Full-stack Engineer",location:"Remote — India",mode:"Remote",salary:"₹16–23 LPA",description:"Full-stack Engineer with 2+ years of experience using TypeScript, React, Next.js, Node.js, PostgreSQL, AWS and CI/CD. Build accessible, tested customer-facing applications." },
-  { id:"vertex-labs",company:"Vertex Labs",title:"Machine Learning Engineer",location:"Delhi",mode:"Hybrid",salary:"₹20–29 LPA",description:"Machine Learning Engineer with 3+ years of experience in Python, PyTorch, MLOps, FastAPI, Docker and AWS. Own model evaluation, deployment and observability." },
-  { id:"civic-tech",company:"CivicTech Studio",title:"Generative AI Engineer",location:"Pune",mode:"Hybrid",salary:"₹17–25 LPA",description:"Generative AI Engineer with Python, GenAI, RAG, LangGraph, FastAPI, PostgreSQL and React. Experience building grounded assistants and evaluation workflows." },
-  { id:"dataforge",company:"DataForge",title:"Backend Platform Engineer",location:"Mumbai",mode:"On-site",salary:"₹15–22 LPA",description:"Backend Platform Engineer with 3+ years using Python, FastAPI, PostgreSQL, Redis, Docker, AWS and system design. Strong API testing and documentation." },
-  { id:"cloudtrail",company:"CloudTrail Systems",title:"Cloud & DevOps Engineer",location:"Gurugram",mode:"Hybrid",salary:"₹17–27 LPA",description:"Cloud and DevOps Engineer with AWS, Kubernetes, Docker, CI/CD, Linux, Python and Terraform experience. Operate reliable delivery platforms." },
-];
 
 const navItems: { id: CandidateView; label: string; eyebrow: string }[] = [
   { id:"overview",label:"My Talent Profile",eyebrow:"PROFILE" },
@@ -144,6 +128,12 @@ function downloadPortfolio(candidate: Candidate) {
 export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
   const [active,setActive]=useState<CandidateView>("overview");
   const [candidate,setCandidate]=useState<Candidate>(()=>buildCandidate(profile));
+  const [jobs, setJobs] = useState<JobOpening[]>([]);
+  const [applyModalOpen, setApplyModalOpen] = useState(false);
+  const [resumeUrl, setResumeUrl] = useState("");
+  const [githubLink, setGithubLink] = useState("");
+  const [applyLoading, setApplyLoading] = useState(false);
+  const [applyStatus, setApplyStatus] = useState<string|null>(null);
   
   useEffect(() => {
     fetch(`http://localhost:8000/api/candidates/account-${profile.userId}`)
@@ -158,6 +148,11 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
         }
       })
       .catch(err => console.log("Candidate not found in DB, using local profile."));
+
+    fetch("http://localhost:8000/api/jobs/")
+      .then(res => res.json())
+      .then(data => setJobs(data))
+      .catch(err => console.log("Failed to fetch jobs", err));
   }, [profile.userId]);
 
   const [resumeFile,setResumeFile]=useState<File|null>(null);
@@ -399,7 +394,54 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
         <button className="candidate-primary full" onClick={runBackendMatch} disabled={matchLoading} style={{marginBottom: "10px"}}>
           {matchLoading ? "Calculating..." : "Calculate ML Match (Backend)"}
         </button>
-        <button className="candidate-secondary full">Save opportunity</button></section></div></div>}
+        <button className="candidate-secondary full" onClick={() => setApplyModalOpen(true)}>Apply for Role</button></section></div></div>}
+
+      {applyModalOpen && (
+        <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+          <div style={{background: 'white', padding: '30px', borderRadius: '12px', width: '400px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'}}>
+            <h3 style={{marginTop: 0}}>Apply to {selectedJob?.job.title}</h3>
+            <p style={{fontSize: '14px', color: '#64748b', marginBottom: '20px'}}>Provide your links below to submit your application.</p>
+            
+            <label style={{display: 'block', marginBottom: '5px', fontSize: '13px', fontWeight: 600}}>Resume Link (Google Drive, Dropbox, etc)</label>
+            <input type="text" style={{width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '15px'}} placeholder="https://..." value={resumeUrl} onChange={e => setResumeUrl(e.target.value)} />
+            
+            <label style={{display: 'block', marginBottom: '5px', fontSize: '13px', fontWeight: 600}}>GitHub Profile / Repository Link</label>
+            <input type="text" style={{width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '20px'}} placeholder="https://github.com/..." value={githubLink} onChange={e => setGithubLink(e.target.value)} />
+            
+            {applyStatus && <p style={{color: applyStatus.includes('success') ? 'green' : 'red', fontSize: '14px', marginBottom: '15px'}}>{applyStatus}</p>}
+            
+            <div style={{display: 'flex', gap: '10px'}}>
+              <button className="candidate-secondary" style={{flex: 1}} onClick={() => setApplyModalOpen(false)}>Cancel</button>
+              <button className="candidate-primary" style={{flex: 1}} disabled={applyLoading} onClick={async () => {
+                setApplyLoading(true); setApplyStatus(null);
+                try {
+                  const res = await fetch(`http://localhost:8000/api/jobs/${selectedJob.job.id}/apply`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      job_id: selectedJob.job.id,
+                      candidate_id: candidate.id,
+                      resume_url: resumeUrl,
+                      github_link: githubLink,
+                      match_score: backendMatch?.score || selectedJob.match.total
+                    })
+                  });
+                  if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.detail || "Application failed");
+                  }
+                  setApplyStatus("Successfully applied!");
+                  setTimeout(() => setApplyModalOpen(false), 1500);
+                } catch(e: any) {
+                  setApplyStatus(e.message);
+                } finally {
+                  setApplyLoading(false);
+                }
+              }}>{applyLoading ? 'Applying...' : 'Submit Application'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {active==="gaps"&&<div className="candidate-page"><section className="candidate-page-lead"><div><span className="candidate-eyebrow">PERSONALIZED CAREER GUIDANCE</span><h2>Close the gaps that unlock your best matches.</h2><p>Priorities come from missing requirements across your top three ranked opportunities—not from a generic learning list.</p></div><div className="candidate-readiness"><span>Market readiness</span><strong>{Math.round(rankedJobs.slice(0,3).reduce((sum,item)=>sum+item.match.total,0)/3)}%</strong><small>Top three average</small></div></section><div className="candidate-gap-grid"><section className="candidate-card"><div className="candidate-section-head"><div><p className="candidate-kicker">PRIORITY GAPS</p><h3>Your highest-impact next skills</h3></div><span>{gapSummary.length} detected</span></div>{gapSummary.length?gapSummary.map((gap,index)=><article className="candidate-gap-row" key={gap.skill}><span>{index+1}</span><div><strong>{gap.skill}</strong><p>Missing from {gap.count} of your top 3 matches · most useful for {gap.bestJob}</p><div className="candidate-bar"><i style={{width:`${Math.min(100,45+gap.count*18)}%`}}/></div></div><b>{gap.count===3?"Critical":gap.count===2?"High":"Useful"}</b></article>):<div className="candidate-empty">No core skill gaps across your top opportunities.</div>}</section><section className="candidate-card"><div className="candidate-section-head"><div><p className="candidate-kicker">90-DAY ROADMAP</p><h3>Recommended next actions</h3></div></div>{gapSummary.slice(0,3).map((gap,index)=><article className="candidate-roadmap" key={gap.skill}><span>{index===0?"Days 1–30":index===1?"Days 31–60":"Days 61–90"}</span><h4>{index===0?`Build foundations in ${gap.skill}`:index===1?`Ship a ${gap.skill} proof project`:`Verify ${gap.skill} in an assessment`}</h4><p>{index===0?"Complete one focused course and document the concepts you can apply.":index===1?"Create a tested repository with a clear README and measurable outcome.":"Take a role-specific interview and add the verified result to your profile."}</p><button>{index===2?"Start verification":"View learning plan"}</button></article>)}</section></div></div>}
 
