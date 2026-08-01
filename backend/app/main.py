@@ -3,12 +3,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import analyze, candidates, interview, matchmaker, hackathon, jobs
 from app.db.database import engine, Base
 
+import os
+from fastapi.staticfiles import StaticFiles
+
 try:
     Base.metadata.create_all(bind=engine)
 except Exception as e:
     print(f"Warning: Could not connect to database to create tables. Ensure DATABASE_URL is set in .env. Error: {e}")
 
+# Ensure uploads directory exists
+os.makedirs("uploads", exist_ok=True)
+
 app = FastAPI(title="SkillNova API", version="1.0.0")
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,

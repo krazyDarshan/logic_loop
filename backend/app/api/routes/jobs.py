@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Form, File, UploadFile
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
+import os
+import shutil
 
 from app.db.database import get_db
 from app.db import models
@@ -26,31 +28,62 @@ def create_job(job_data: job.JobCreate, db: Session = Depends(get_db)):
     return new_job
 
 @router.post("/{id}/apply", response_model=job.ApplicationResponse)
-def apply_to_job(id: str, app_data: job.ApplicationCreate, db: Session = Depends(get_db)):
+async def apply_to_job(
+    id: str, 
+    candidate_id: str = Form(...),
+    candidate_name: str = Form(""),
+    candidate_email: str = Form(""),
+    candidate_role: str = Form(""),
+    candidate_location: str = Form(""),
+    github_link: str = Form(""),
+    match_score: float = Form(0.0),
+    resume_file: UploadFile = File(None),
+    db: Session = Depends(get_db)
+):
     job_record = db.query(models.Job).filter(models.Job.id == id).first()
     if not job_record:
         raise HTTPException(status_code=404, detail="Job not found")
         
-    candidate_record = db.query(models.Candidate).filter(models.Candidate.id == app_data.candidate_id).first()
+    candidate_record = db.query(models.Candidate).filter(models.Candidate.id == candidate_id).first()
     if not candidate_record:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+        # Upsert candidate
+        candidate_record = models.Candidate(
+            id=candidate_id,
+            name=candidate_name or f"Candidate {candidate_id}",
+            email=candidate_email,
+            role=candidate_role,
+            location=candidate_location,
+            github_handle=github_link.split("/")[-1] if github_link else ""
+        )
+        db.add(candidate_record)
+        db.commit()
+        db.refresh(candidate_record)
         
     # Check if already applied
     existing_app = db.query(models.JobApplication).filter(
         models.JobApplication.job_id == id,
-        models.JobApplication.candidate_id == app_data.candidate_id
+        models.JobApplication.candidate_id == candidate_id
     ).first()
     if existing_app:
         raise HTTPException(status_code=400, detail="Candidate already applied to this job")
         
+    resume_url = ""
+    if resume_file and resume_file.filename:
+        file_ext = resume_file.filename.split(".")[-1]
+        unique_filename = f"{uuid.uuid4()}.{file_ext}"
+        file_path = os.path.join("uploads", unique_filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(resume_file.file, buffer)
+        resume_url = f"http://localhost:8000/uploads/{unique_filename}"
+
     new_app = models.JobApplication(
         id=str(uuid.uuid4()),
         job_id=id,
-        candidate_id=app_data.candidate_id,
-        resume_url=app_data.resume_url,
-        github_link=app_data.github_link,
+        candidate_id=candidate_id,
+        resume_url=resume_url,
+        github_link=github_link,
         status="applied",
-        match_score=app_data.match_score
+        match_score=match_score
     )
     db.add(new_app)
     db.commit()

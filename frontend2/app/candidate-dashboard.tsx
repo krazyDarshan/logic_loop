@@ -139,7 +139,7 @@ export function CandidateDashboard({ profile, onLogout }: { profile: AccountProf
   const [candidate,setCandidate]=useState<Candidate>(()=>buildCandidate(profile));
   const [jobs, setJobs] = useState<JobOpening[]>(fallbackJobs);
   const [applyModalOpen, setApplyModalOpen] = useState(false);
-  const [resumeUrl, setResumeUrl] = useState("");
+  const [resumeFileToApply, setResumeFileToApply] = useState<File|null>(null);
   const [githubLink, setGithubLink] = useState("");
   const [applyLoading, setApplyLoading] = useState(false);
   const [applyStatus, setApplyStatus] = useState<string|null>(null);
@@ -427,8 +427,8 @@ export function CandidateDashboard({ profile, onLogout }: { profile: AccountProf
             <h3 style={{marginTop: 0}}>Apply to {selectedJob?.job.title}</h3>
             <p style={{fontSize: '14px', color: '#64748b', marginBottom: '20px'}}>Provide your links below to submit your application.</p>
             
-            <label style={{display: 'block', marginBottom: '5px', fontSize: '13px', fontWeight: 600}}>Resume Link (Google Drive, Dropbox, etc)</label>
-            <input type="text" style={{width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '15px'}} placeholder="https://..." value={resumeUrl} onChange={e => setResumeUrl(e.target.value)} />
+            <label style={{display: 'block', marginBottom: '5px', fontSize: '13px', fontWeight: 600}}>Resume PDF Upload</label>
+            <input type="file" accept="application/pdf" style={{width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '15px'}} onChange={e => e.target.files && setResumeFileToApply(e.target.files[0])} />
             
             <label style={{display: 'block', marginBottom: '5px', fontSize: '13px', fontWeight: 600}}>GitHub Profile / Repository Link</label>
             <input type="text" style={{width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '20px'}} placeholder="https://github.com/..." value={githubLink} onChange={e => setGithubLink(e.target.value)} />
@@ -440,19 +440,24 @@ export function CandidateDashboard({ profile, onLogout }: { profile: AccountProf
               <button className="candidate-primary" style={{flex: 1}} disabled={applyLoading} onClick={async () => {
                 setApplyLoading(true); setApplyStatus(null);
                 try {
+                  const formData = new FormData();
+                  formData.append("candidate_id", candidate.id);
+                  formData.append("candidate_name", candidate.name);
+                  formData.append("candidate_email", profile.email || candidate.email || "");
+                  formData.append("candidate_role", candidate.role || "");
+                  formData.append("candidate_location", candidate.location || "");
+                  formData.append("github_link", githubLink);
+                  formData.append("match_score", String(backendMatch?.score || selectedJob.match.total));
+                  if (resumeFileToApply) {
+                    formData.append("resume_file", resumeFileToApply);
+                  }
+
                   const res = await fetch(`http://localhost:8000/api/jobs/${selectedJob.job.id}/apply`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      job_id: selectedJob.job.id,
-                      candidate_id: candidate.id,
-                      resume_url: resumeUrl,
-                      github_link: githubLink,
-                      match_score: backendMatch?.score || selectedJob.match.total
-                    })
+                    body: formData
                   });
                   if (!res.ok) {
-                    const data = await res.json();
+                    const data = await res.json().catch(() => ({}));
                     throw new Error(data.detail || "Application failed");
                   }
                   setApplyStatus("Successfully applied!");
