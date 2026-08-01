@@ -2,13 +2,13 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAY707hjwUYi8CjUqAFQG6NQht83OFSVlA",
-  authDomain: "skillnova-92f52.firebaseapp.com",
-  projectId: "skillnova-92f52",
-  storageBucket: "skillnova-92f52.firebasestorage.app",
-  messagingSenderId: "795604572657",
-  appId: "1:795604572657:web:daff388de722c9a4130c50",
-  measurementId: "G-6R81X32W81"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
