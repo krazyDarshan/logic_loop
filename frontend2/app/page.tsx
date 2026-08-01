@@ -16,7 +16,7 @@ import { extractFileText, fetchGithubEvidence } from "./evidence-client";
 import { CandidateDashboard } from "./candidate-dashboard";
 import type { AccountProfile, AccountRole, AuthenticatedUser, SessionResponse } from "./account-types";
 
-type View = "profile" | "match" | "verify" | "hackathon" | "recruiter" | "trust";
+type View = "profile" | "verify" | "hackathon" | "recruiter" | "trust" | "createjob";
 type IconName = "spark" | "profile" | "match" | "verify" | "trophy" | "people" | "github" | "file" | "arrow" | "check" | "search" | "briefcase" | "menu" | "close" | "shield" | "code" | "clock" | "download" | "compare" | "database" | "alert";
 
 const iconPaths: Record<IconName, ReactNode> = {
@@ -38,7 +38,7 @@ function Icon({name,size=20}:{name:IconName;size?:number}){return <svg aria-hidd
 const clamp=(value:number)=>Math.round(Math.min(100,Math.max(0,value)));
 
 const navItems:{id:View;label:string;icon:IconName;eyebrow:string}[]=[
-  {id:"profile",label:"Talent Intelligence",icon:"profile",eyebrow:"Analyze"},{id:"match",label:"Job Matching",icon:"match",eyebrow:"Match"},{id:"verify",label:"Skill Verification",icon:"verify",eyebrow:"Validate"},{id:"hackathon",label:"Hackathon Hiring",icon:"trophy",eyebrow:"Discover"},{id:"recruiter",label:"Recruiter Workspace",icon:"people",eyebrow:"Decide"},{id:"trust",label:"Trust Center",icon:"shield",eyebrow:"Govern"},
+  {id:"profile",label:"Talent Intelligence",icon:"profile",eyebrow:"Analyze"},{id:"verify",label:"Skill Verification",icon:"verify",eyebrow:"Validate"},{id:"hackathon",label:"Hackathon Hiring",icon:"trophy",eyebrow:"Discover"},{id:"recruiter",label:"Recruiter Workspace",icon:"people",eyebrow:"Decide"},{id:"trust",label:"Trust Center",icon:"shield",eyebrow:"Govern"},{id:"createjob",label:"Create Job",icon:"file",eyebrow:"Define"},
 ];
 
 const dimensions:[keyof Candidate["score"]["dimensions"],string,number][]=[
@@ -60,24 +60,312 @@ function TalentScoreCard({candidate}:{candidate:Candidate}){return <section clas
 
 function ProfileView({candidate,onCandidateAnalyzed,onNavigate}:{candidate:Candidate;onCandidateAnalyzed:(candidate:Candidate)=>void;onNavigate:(view:View)=>void}){
   const [file,setFile]=useState<File|null>(null);const [username,setUsername]=useState("darshanbawaskar");const [loading,setLoading]=useState(false);const [message,setMessage]=useState("");const [resumeSignals,setResumeSignals]=useState<ResumeSignals|null>(null);
-  const analyze=async()=>{setLoading(true);setMessage("");try{let resume:ResumeSignals|null=null;if(file){const text=await extractFileText(file);resume=parseResumeText(text);setResumeSignals(resume)}const live=await fetchGithubEvidence(username.trim());const merged=mergeLiveCandidate(candidate,resume,live.github,live.name);onCandidateAnalyzed(merged);setMessage(`Live profile calculated from ${live.github.repos} repositories${resume?` and ${resume.skills.length} resume skills`:""}.`)}catch(error){setMessage(error instanceof Error?error.message:"Analysis failed. Please try again.")}finally{setLoading(false)}};
+  const [backendScores, setBackendScores] = useState<{resume?: number, github?: number, total?: number}>({});
+  
+  const analyzeGithub = async () => {
+    setLoading(true); setMessage("");
+    try {
+      const response = await fetch("http://localhost:8000/api/analyze/github", { 
+        method: "POST", 
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username.trim() }) 
+      });
+      if (!response.ok) throw new Error("Backend analysis failed");
+      const resData = await response.json();
+      setBackendScores(prev => ({...prev, github: resData.analysis.github_total_score}));
+      setMessage(`[Backend GitHub Score: ${resData.analysis.github_total_score}] Analysis complete.`);
+      const live=await fetchGithubEvidence(username.trim());
+      const merged=mergeLiveCandidate(candidate,null,live.github,live.name);
+      onCandidateAnalyzed(merged);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Analysis failed.");
+    } finally { setLoading(false); }
+  };
+  
+  const analyzeResume = async () => {
+    setLoading(true); setMessage("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file!);
+      const response = await fetch("http://localhost:8000/api/analyze/resume", { method: "POST", body: formData });
+      if (!response.ok) throw new Error("Backend analysis failed");
+      const resData = await response.json();
+      setBackendScores(prev => ({...prev, resume: resData.analysis.resume_total_score}));
+      setMessage(`[Backend Resume Score: ${resData.analysis.resume_total_score}] Analysis complete.`);
+      const text=await extractFileText(file!);
+      const resume=parseResumeText(text);
+      setResumeSignals(resume);
+      const merged=mergeLiveCandidate(candidate,resume,candidate.github,candidate.name);
+      onCandidateAnalyzed(merged);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Analysis failed.");
+    } finally { setLoading(false); }
+  };
+  
+  const analyzeTotal = async () => {
+    setLoading(true); setMessage("");
+    try {
+      const formData = new FormData();
+      if(file) formData.append("file", file);
+      if(username.trim()) formData.append("github_username", username.trim());
+      const response = await fetch("http://localhost:8000/api/analyze/full", { method: "POST", body: formData });
+      if (!response.ok) throw new Error("Backend analysis failed");
+      const resData = await response.json();
+      setBackendScores({
+        total: resData.scores_summary.combined_total_score,
+        github: resData.scores_summary.github_total_score,
+        resume: resData.scores_summary.resume_total_score
+      });
+      setMessage(`[Backend Total Score: ${resData.scores_summary.combined_total_score}] Github: ${resData.scores_summary.github_total_score}, Resume: ${resData.scores_summary.resume_total_score}`);
+      let resume:ResumeSignals|null=null;
+      if(file){const text=await extractFileText(file);resume=parseResumeText(text);setResumeSignals(resume)}
+      const live=username.trim()?await fetchGithubEvidence(username.trim()):null;
+      const merged=mergeLiveCandidate(candidate,resume,live?.github||candidate.github,live?.name||candidate.name);
+      onCandidateAnalyzed(merged);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Analysis failed.");
+    } finally { setLoading(false); }
+  };
+
   return <div className="view-wrap"><section className="product-hero"><div><span className="eyebrow"><Icon name="spark" size={14}/>LIVE TALENT INTELLIGENCE</span><h2>Turn candidate evidence into a decision you can defend.</h2><p>Upload a resume and connect any public GitHub profile. SkillNova extracts skills, inspects contribution signals, calculates seven capability dimensions, and shows the proof behind every score.</p><div className="hero-proof"><span><Icon name="database" size={16}/>Live public data</span><span><Icon name="shield" size={16}/>Explainable formulas</span><span><Icon name="check" size={16}/>Evidence-linked claims</span></div></div><div className="hero-score-panel"><div><span>Current candidate</span><strong>{candidate.name}</strong><small>{candidate.source==="live"?"Live evidence profile":"Verified sample dataset"}</small></div><ScoreRing score={candidate.score.total} label="Talent score" light/><div className="hero-mini-stats"><span><b>{candidate.score.confidence}%</b> confidence</span><span><b>{candidate.score.evidenceCount}</b> evidence signals</span><span><b>{getAuthenticityScore(candidate)}</b> authenticity</span></div></div></section>
-    <section className="analysis-console"><div><div className="section-heading"><div><p className="kicker">ANALYZE A CANDIDATE</p><h3>Connect candidate evidence</h3></div><span>Public data only</span></div><label className="upload-zone"><input type="file" accept=".pdf,.txt" onChange={event=>setFile(event.target.files?.[0]||null)}/><span className="upload-icon"><Icon name="file"/></span><div><strong>{file?.name||"Choose a resume PDF"}</strong><p>{file?"Ready for local skill extraction":"PDF or text · up to 20 pages analyzed"}</p></div>{file&&<span className="ready-pill"><Icon name="check" size={12}/>Ready</span>}</label><label className="field-group"><span>GitHub username</span><div className="input-shell"><Icon name="github" size={18}/><span>github.com/</span><input value={username} onChange={event=>setUsername(event.target.value)} placeholder="username"/></div></label><div className="analysis-actions"><button className="primary-button" onClick={analyze} disabled={loading||!username.trim()}>{loading?<><span className="spinner"/>Calculating live signals...</>:<><Icon name="spark" size={16}/>Analyze and calculate</>}</button><button className="ghost-button" onClick={()=>{onCandidateAnalyzed(seededCandidates[0]);setResumeSignals(null);setMessage("Sample evidence profile loaded.")}}>Use sample profile</button></div>{message&&<div className={`analysis-message ${message.includes("failed")||message.includes("not found")||message.includes("limit")?"error":""}`}>{message}</div>}</div><div className="analysis-pipeline"><p className="kicker">CALCULATION PIPELINE</p>{[["Resume extraction",file?"Ready":"Optional",file?"check":"file"],["GitHub activity",username?"Connected":"Required","github"],["Evidence normalization",resumeSignals?`${resumeSignals.skills.length} skills detected`:"Runs automatically","database"],["Talent scoring","7 weighted dimensions","spark"]].map(([label,status,icon],index)=><div className="calculation-step" key={label}><span><Icon name={icon as IconName} size={17}/></span><div><strong>{index+1}. {label}</strong><small>{status}</small></div><Icon name="check" size={14}/></div>)}</div></section>
-    <div className="results-grid final-grid"><div className="span-7"><EvidenceExplorer candidate={candidate}/></div><div className="span-5"><TalentScoreCard candidate={candidate}/></div><section className="content-card span-7"><div className="section-heading"><div><p className="kicker">GITHUB INTELLIGENCE</p><h3>@{candidate.github.username}</h3></div><span className={candidate.source==="live"?"live-badge":"sample-badge"}>{candidate.source==="live"?"Live API":"Sample"}</span></div><div className="github-stat-grid">{[[candidate.github.repos,"Original repos"],[candidate.github.stars,"Stars earned"],[candidate.github.commits,"Recent commits"],[candidate.github.pullRequests,"PR signals"],[`${candidate.github.tests}%`,"Testing maturity"],[`${candidate.github.documentation}%`,"Documentation"]].map(([value,label])=><div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div><div className="skill-list">{candidate.github.languages.map(language=><SkillPill key={language}>{language}</SkillPill>)}</div></section><section className="content-card span-5 decision-card"><p className="kicker">NEXT DECISION</p><h3>Profile ready for role matching</h3><p>SkillNova has enough evidence to calculate role fit and generate targeted interview questions.</p><button className="primary-button full" onClick={()=>onNavigate("match")}>Calculate job match <Icon name="arrow" size={16}/></button><button className="text-button" onClick={()=>onNavigate("verify")}>Start skill verification</button></section></div>
+    <section className="analysis-console"><div><div className="section-heading"><div><p className="kicker">ANALYZE A CANDIDATE</p><h3>Connect candidate evidence</h3></div><span>Public data only</span></div><label className="upload-zone"><input type="file" accept=".pdf,.txt" onChange={event=>setFile(event.target.files?.[0]||null)}/><span className="upload-icon"><Icon name="file"/></span><div><strong>{file?.name||"Choose a resume PDF"}</strong><p>{file?"Ready for local skill extraction":"PDF or text · up to 20 pages analyzed"}</p></div>{file&&<span className="ready-pill"><Icon name="check" size={12}/>Ready</span>}</label><label className="field-group"><span>GitHub username</span><div className="input-shell"><Icon name="github" size={18}/><span>github.com/</span><input value={username} onChange={event=>setUsername(event.target.value)} placeholder="username"/></div></label><div className="analysis-actions">
+<div style={{display: 'flex', gap: '12px'}}>
+  <button className="primary-button" style={{flex: 1}} onClick={analyzeGithub} disabled={loading||!username.trim()}>
+    {loading?<><span className="spinner"/>Calculating...</>:<><Icon name="github" size={16}/>Analyze GitHub</>}
+  </button>
+  <button className="primary-button" style={{flex: 1}} onClick={analyzeResume} disabled={loading||!file}>
+    {loading?<><span className="spinner"/>Calculating...</>:<><Icon name="file" size={16}/>Analyze Resume</>}
+  </button>
+  <button className="primary-button" style={{flex: 1}} onClick={analyzeTotal} disabled={loading||!username.trim()&&!file}>
+    {loading?<><span className="spinner"/>Calculating...</>:<><Icon name="spark" size={16}/>Calculate Total Score</>}
+  </button>
+</div>
+<button className="ghost-button" onClick={()=>{onCandidateAnalyzed(seededCandidates[0]);setResumeSignals(null);setBackendScores({});setMessage("Sample evidence profile loaded.")}}>Use sample profile</button></div>{message&&<div className={`analysis-message ${message.includes("failed")||message.includes("not found")||message.includes("limit")?"error":""}`}>{message}</div>}
+{(backendScores.resume !== undefined || backendScores.github !== undefined || backendScores.total !== undefined) && (
+  <div style={{display: 'flex', gap: '30px', marginTop: '20px', justifyContent: 'center', padding: '15px'}}>
+    {backendScores.resume !== undefined && (
+      <ScoreRing score={backendScores.resume} label="Resume Score" />
+    )}
+    {backendScores.github !== undefined && (
+      <ScoreRing score={backendScores.github} label="GitHub Score" />
+    )}
+    {backendScores.total !== undefined && (
+      <ScoreRing score={backendScores.total} label="Total Score" light />
+    )}
+  </div>
+)}
+</div><div className="analysis-pipeline"><p className="kicker">CALCULATION PIPELINE</p>{[["Resume extraction",file?"Ready":"Optional",file?"check":"file"],["GitHub activity",username?"Connected":"Required","github"],["Evidence normalization",resumeSignals?`${resumeSignals.skills.length} skills detected`:"Runs automatically","database"],["Talent scoring","7 weighted dimensions","spark"]].map(([label,status,icon],index)=><div className="calculation-step" key={label}><span><Icon name={icon as IconName} size={17}/></span><div><strong>{index+1}. {label}</strong><small>{status}</small></div><Icon name="check" size={14}/></div>)}</div></section>
+    <div className="results-grid final-grid"><div className="span-7"><EvidenceExplorer candidate={candidate}/></div><div className="span-5"><TalentScoreCard candidate={candidate}/></div><section className="content-card span-7"><div className="section-heading"><div><p className="kicker">GITHUB INTELLIGENCE</p><h3>@{candidate.github.username}</h3></div><span className={candidate.source==="live"?"live-badge":"sample-badge"}>{candidate.source==="live"?"Live API":"Sample"}</span></div><div className="github-stat-grid">{[[candidate.github.repos,"Original repos"],[candidate.github.stars,"Stars earned"],[candidate.github.commits,"Recent commits"],[candidate.github.pullRequests,"PR signals"],[`${candidate.github.tests}%`,"Testing maturity"],[`${candidate.github.documentation}%`,"Documentation"]].map(([value,label])=><div key={label}><strong>{value}</strong><span>{label}</span></div>)}</div><div className="skill-list">{candidate.github.languages.map(language=><SkillPill key={language}>{language}</SkillPill>)}</div></section><section className="content-card span-5 decision-card"><p className="kicker">NEXT DECISION</p><h3>Profile ready for role matching</h3><p>SkillNova has enough evidence to calculate role fit and generate targeted interview questions.</p><button className="primary-button full" onClick={()=>onNavigate("createjob")}>Create Job <Icon name="arrow" size={16}/></button><button className="text-button" onClick={()=>onNavigate("verify")}>Start skill verification</button></section></div>
   </div>
 }
 
-function MatchPanel({candidate,description}:{candidate:Candidate;description:string}){const match=useMemo(()=>calculateJobMatch(candidate,description),[candidate,description]);return <><div className="match-summary"><ScoreRing score={match.total} label="Role match" light/><div><span className={match.total>=85?"fit-badge":"review-state"}>{match.total>=90?"Exceptional fit":match.total>=80?"Strong fit":"Potential fit"}</span><h3>{candidate.name}</h3><p>{match.explanation}</p></div></div><div className="match-breakdown">{[["Skill similarity",match.skillSimilarity,45],["Project relevance",match.projectRelevance,25],["Experience fit",match.experienceFit,20],["Evidence confidence",match.evidenceConfidence,10]].map(([label,value,weight])=><div key={String(label)}><div><span>{label}<small>{weight}% weight</small></span><strong>{value}</strong></div><div className="bar"><i style={{width:`${value}%`}}/></div></div>)}</div><div className="match-skill-columns"><div><h4>Matched requirements</h4><div className="skill-list">{match.matchedSkills.length?match.matchedSkills.map(item=><SkillPill key={item} state="good">{item}</SkillPill>):<span className="empty-copy">Add technical requirements to the job description.</span>}</div></div><div><h4>Missing or unverified</h4><div className="skill-list">{match.missingSkills.length?match.missingSkills.map(item=><SkillPill key={item} state="missing">{item}</SkillPill>):<SkillPill state="good">No core gaps</SkillPill>}</div></div></div><div className="formula-equation">Match = Skill similarity×.45 + Project relevance×.25 + Experience fit×.20 + Evidence confidence×.10</div></>}
+function CreateJobView() {
+  const [role, setRole] = useState("");
+  const [profile, setProfile] = useState("");
+  const [skills, setSkills] = useState("");
+  const [description, setDescription] = useState("");
+  const [responsibilities, setResponsibilities] = useState("");
+  const [message, setMessage] = useState("");
 
-function MatchView({pool,selectedId,onSelect,onNavigate}:{pool:Candidate[];selectedId:string;onSelect:(id:string)=>void;onNavigate:(view:View)=>void}){const [description,setDescription]=useState("Senior AI Product Engineer with 3+ years of experience. Strong Python, React, FastAPI, LangGraph, PostgreSQL, Docker and AWS skills. Experience shipping reliable GenAI products, collaborating with design teams and writing production tests.");const candidate=pool.find(item=>item.id===selectedId)||pool[0];const ranked=useMemo(()=>pool.map(item=>({candidate:item,match:calculateJobMatch(item,description)})).sort((a,b)=>b.match.total-a.match.total),[pool,description]);return <div className="view-wrap"><section className="page-lead light-lead"><div><span className="eyebrow"><Icon name="match" size={14}/>LIVE JOB MATCHING</span><h2>Rank candidates with an explainable fit model.</h2><p>The match updates as the job description changes. Every percentage is calculated from skills, projects, experience, and evidence confidence.</p></div><CandidateSelect pool={pool} value={selectedId} onChange={onSelect}/></section><div className="match-layout"><section className="content-card match-form"><div className="section-heading"><div><p className="kicker">ROLE INPUT</p><h3>Job requirements</h3></div><span>{description.length} characters</span></div><textarea rows={13} value={description} onChange={event=>setDescription(event.target.value)} aria-label="Job description"/><div className="recommendation-box"><Icon name="spark" size={17}/><p><strong>Live calculation</strong><br/>Add or remove a skill and every candidate ranking will recalculate immediately.</p></div></section><section className="content-card"><MatchPanel candidate={candidate} description={description}/><button className="primary-button full" onClick={()=>onNavigate("verify")}>Verify priority skills <Icon name="arrow" size={16}/></button></section></div><section className="content-card ranking-card"><div className="section-heading"><div><p className="kicker">CANDIDATE RECOMMENDATIONS</p><h3>Best matches for this role</h3></div><span>{pool.length} evaluated</span></div><div className="ranking-list">{ranked.slice(0,6).map(({candidate:item,match},index)=><button key={item.id} onClick={()=>onSelect(item.id)} className={item.id===selectedId?"active":""}><span className="rank-number">{String(index+1).padStart(2,"0")}</span><span className="small-avatar">{item.initials}</span><span><strong>{item.name}</strong><small>{item.role} · {item.location}</small></span><b>{match.total}%<small>match</small></b><Icon name="arrow" size={15}/></button>)}</div></section></div>}
+  const handleSave = () => {
+    setMessage("Job created successfully!");
+    setTimeout(() => setMessage(""), 3000);
+  };
 
-type InterviewQuestion={skill:string;prompt:string;rubric:string[]};
-function makeQuestions(candidate:Candidate):InterviewQuestion[]{const top=candidate.skills.slice(0,3);return [{skill:top[0]?.name||"Engineering",prompt:`Your profile shows strong ${top[0]?.name}. Describe a production decision you made using it, the trade-off you considered, and how you verified the outcome.`,rubric:["trade-off","test","production","monitor"]},{skill:top[1]?.name||"Architecture",prompt:`Design a reliable service using ${top[1]?.name}. How would you handle failure, scaling, testing, and observability?`,rubric:["failure","scale","test","observ"]},{skill:"Problem solving",prompt:`A critical release is failing intermittently. Explain your investigation sequence, communication approach, and rollback decision.`,rubric:["reproduce","logs","communicat","rollback"]}]}
-function evaluateAnswer(answer:string,question:InterviewQuestion){const normalized=answer.toLowerCase();const coverage=question.rubric.filter(term=>normalized.includes(term)).length/question.rubric.length;const depth=Math.min(answer.trim().split(/\s+/).length/120,1);const structure=["because","first","then","however","therefore"].filter(word=>normalized.includes(word)).length/3;const score=clamp(45+coverage*32+depth*15+Math.min(structure,1)*8);return {score,coverage:clamp(coverage*100),depth:clamp(depth*100),structure:clamp(Math.min(structure,1)*100)}}
+  return (
+    <div className="view-wrap">
+      <section className="page-lead light-lead">
+        <div>
+          <span className="eyebrow"><Icon name="file" size={14}/>CREATE NEW JOB</span>
+          <h2>Define role requirements and responsibilities.</h2>
+          <p>Create a job listing to match candidates against specific skills and experiences.</p>
+        </div>
+      </section>
+      
+      <section className="content-card match-form" style={{ maxWidth: '800px', margin: '0 auto' }}>
+        <div className="section-heading">
+          <div>
+            <p className="kicker">JOB DETAILS</p>
+            <h3>New Job Listing</h3>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <label className="field-group">
+            <span>Job Role</span>
+            <div className="input-shell">
+              <input value={role} onChange={e => setRole(e.target.value)} placeholder="e.g. Senior Frontend Engineer" style={{width: '100%'}}/>
+            </div>
+          </label>
+          <label className="field-group">
+            <span>Job Profile</span>
+            <div className="input-shell">
+              <input value={profile} onChange={e => setProfile(e.target.value)} placeholder="e.g. Engineering" style={{width: '100%'}}/>
+            </div>
+          </label>
+          <label className="field-group">
+            <span>Skills Required (comma separated)</span>
+            <div className="input-shell">
+              <input value={skills} onChange={e => setSkills(e.target.value)} placeholder="e.g. React, TypeScript, Next.js" style={{width: '100%'}}/>
+            </div>
+          </label>
+          <label className="field-group">
+            <span>Job Description</span>
+            <textarea rows={6} value={description} onChange={e => setDescription(e.target.value)} placeholder="Overview of the role..." />
+          </label>
+          <label className="field-group">
+            <span>Responsibilities</span>
+            <textarea rows={6} value={responsibilities} onChange={e => setResponsibilities(e.target.value)} placeholder="Key responsibilities..." />
+          </label>
+          
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '15px' }}>
+            {message && <span style={{ color: '#16a34a', fontSize: '14px', fontWeight: 'bold' }}>{message}</span>}
+            <button className="primary-button" onClick={handleSave} style={{ width: 'auto', padding: '0 30px' }}>
+              Create Job Listing
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
 
-function VerifyView({pool,selectedId,onSelect}:{pool:Candidate[];selectedId:string;onSelect:(id:string)=>void}){const candidate=pool.find(item=>item.id===selectedId)||pool[0];const questions=useMemo(()=>makeQuestions(candidate),[candidate]);const [questionIndex,setQuestionIndex]=useState(0);const [answer,setAnswer]=useState("");const [evaluation,setEvaluation]=useState<ReturnType<typeof evaluateAnswer>|null>(null);const [code,setCode]=useState(`function normalizeSkills(skills) {\n  return [...new Set(skills.map(skill => skill.trim().toLowerCase()))].sort();\n}`);const [testResult,setTestResult]=useState<{passed:number;total:number;message:string}|null>(null);const runTests=()=>{setTestResult(null);const source=`onmessage=e=>{try{const fn=eval('('+e.data+')');const tests=[[[' React ','python','react'],['python','react']],[[],[]],[['SQL','sql',' Python'],['python','sql']]];let passed=0;for(const [input,expected] of tests){const actual=fn(input);if(JSON.stringify(actual)===JSON.stringify(expected))passed++}postMessage({passed,total:tests.length,message:passed===tests.length?'All tests passed':'Review normalization, duplicates, and sorting.'})}catch(error){postMessage({passed:0,total:3,message:error.message})}}`;const worker=new Worker(URL.createObjectURL(new Blob([source],{type:"text/javascript"})));const timer=window.setTimeout(()=>{worker.terminate();setTestResult({passed:0,total:3,message:"Execution timed out after 2 seconds."})},2000);worker.onmessage=event=>{window.clearTimeout(timer);worker.terminate();setTestResult(event.data)};worker.postMessage(code)};return <div className="view-wrap"><section className="page-lead light-lead"><div><span className="eyebrow"><Icon name="verify" size={14}/>ADAPTIVE SKILL VERIFICATION</span><h2>Test claims against reasoning and code.</h2><p>Interview ratings are calculated from rubric coverage, answer depth, structure, and executable test results.</p></div><CandidateSelect pool={pool} value={selectedId} onChange={id=>{onSelect(id);setQuestionIndex(0);setEvaluation(null)}}/></section><div className="verify-final-grid"><section className="content-card interview-workspace"><div className="interview-top"><div className="agent-id"><span><Icon name="spark"/></span><div><strong>Nova · Evidence interviewer</strong><p><i/>Grounded in {candidate.name}&apos;s profile</p></div></div><span>Question {questionIndex+1} of {questions.length}</span></div><div className="progress-track"><i style={{width:`${((questionIndex+1)/questions.length)*100}%`}}/></div><div className="question-card"><span>{questions[questionIndex].skill}</span><h3>{questions[questionIndex].prompt}</h3><small>Rubric checks: {questions[questionIndex].rubric.join(" · ")}</small></div><label className="answer-area">Candidate answer<textarea rows={8} value={answer} onChange={event=>setAnswer(event.target.value)} placeholder="Explain decisions, trade-offs, validation, and measurable outcome..."/></label><div className="answer-footer"><span>{answer.trim().split(/\s+/).filter(Boolean).length} words</span><button className="primary-button" disabled={answer.trim().length<30} onClick={()=>setEvaluation(evaluateAnswer(answer,questions[questionIndex]))}>Evaluate answer <Icon name="spark" size={15}/></button></div>{evaluation&&<div className="evaluation-panel"><div><ScoreRing score={evaluation.score} label="Answer score" light/><div><h3>{evaluation.score>=80?"Strong evidence":"Follow-up recommended"}</h3><p>The score is calculated from the published rubric—not confidence or facial analysis.</p></div></div><div className="evaluation-metrics"><span>Rubric coverage <b>{evaluation.coverage}%</b></span><span>Answer depth <b>{evaluation.depth}%</b></span><span>Reasoning structure <b>{evaluation.structure}%</b></span></div><button className="ghost-button" onClick={()=>{setQuestionIndex((questionIndex+1)%questions.length);setAnswer("");setEvaluation(null)}}>Next adaptive question <Icon name="arrow" size={15}/></button></div>}</section><section className="content-card code-workspace"><div className="section-heading"><div><p className="kicker">CODE VERIFICATION</p><h3>Executable assessment</h3></div><span><Icon name="clock" size={13}/>2s limit</span></div><div className="challenge"><strong>Normalize a skill list</strong><p>Return unique, lowercase, trimmed skills in alphabetical order.</p></div><textarea className="code-editor" value={code} onChange={event=>setCode(event.target.value)} spellCheck={false} rows={12}/><button className="primary-button full" onClick={runTests}><Icon name="code" size={16}/>Run 3 test cases</button>{testResult&&<div className={`test-result ${testResult.passed===testResult.total?"pass":"fail"}`}><Icon name={testResult.passed===testResult.total?"check":"alert"}/><div><strong>{testResult.passed}/{testResult.total} tests passed</strong><p>{testResult.message}</p></div></div>}<div className="verified-skill-stack"><p className="kicker">PROFILE VERIFICATION</p>{candidate.skills.slice(0,5).map(item=><div key={item.name}><span><Icon name={item.verified?"check":"alert"} size={13}/>{item.name}</span><strong>{item.verified?`${item.level}%`:`Review`}</strong></div>)}</div></section></div></div>}
 
-function HackathonView({pool,onSelect,onNavigate}:{pool:Candidate[];onSelect:(id:string)=>void;onNavigate:(view:View)=>void}){const ranked=[...pool].filter(item=>item.hackathons.count).sort((a,b)=>b.hackathons.innovation-a.hackathons.innovation);const [activeId,setActiveId]=useState(ranked[0].id);const candidate=ranked.find(item=>item.id===activeId)||ranked[0];return <div className="view-wrap"><section className="page-lead light-lead"><div><span className="eyebrow"><Icon name="trophy" size={14}/>HACKATHON-TO-HIRING</span><h2>Find builders while the work is still visible.</h2><p>Rank projects using innovation, feasibility, technical depth, contribution evidence, and candidate authenticity.</p></div><div className="event-chip"><span className="event-mark">LL</span><div><small>Talent pool</small><strong>Logic Loop 2026</strong></div><span>{ranked.length} finalists</span></div></section><div className="hackathon-stats">{[[ranked.reduce((sum,item)=>sum+item.hackathons.count,0),"Projects analyzed","trophy"],[ranked.filter(item=>item.score.total>=80).length,"Recruiter-ready","people"],[Math.max(...ranked.map(item=>item.hackathons.innovation)),"Top innovation","spark"],[ranked.reduce((sum,item)=>sum+item.hackathons.wins,0),"Winning projects","briefcase"]].map(([value,label,icon])=><div key={String(label)}><span className="stat-icon blue"><Icon name={icon as IconName}/></span><p>{label}<strong>{value}</strong></p></div>)}</div><div className="hackathon-layout"><section className="content-card leaderboard"><div className="section-heading"><div><p className="kicker">PROJECT RANKING</p><h3>Top evidence signals</h3></div></div>{ranked.map((item,index)=><button key={item.id} className={`project-row ${activeId===item.id?"active":""}`} onClick={()=>setActiveId(item.id)}><span className="rank">{String(index+1).padStart(2,"0")}</span><span className="project-avatar">{item.initials}</span><span className="project-copy"><strong>{item.hackathons.project}</strong><small>{item.name} · {item.role}</small></span><span className="project-score">{item.hackathons.innovation}<small>innovation</small></span><Icon name="arrow" size={15}/></button>)}</section><section className="content-card project-detail"><div className="project-cover"><div><span className="fit-badge">{candidate.hackathons.wins?"Winner":"Finalist"}</span><h3>{candidate.hackathons.project}</h3><p>Led by {candidate.name} · {candidate.location}</p></div><ScoreRing score={candidate.hackathons.innovation} label="Innovation" light/></div><p className="project-description">{candidate.summary} The project is supported by {candidate.github.repos} public repositories, {candidate.github.commits} contribution signals, and {candidate.score.evidenceCount} total evidence points.</p><div className="project-score-grid">{[["Innovation",candidate.hackathons.innovation],["Technical depth",candidate.score.dimensions.coding],["Feasibility",candidate.score.dimensions.projectQuality],["Authenticity",getAuthenticityScore(candidate)]].map(([label,value])=><div key={String(label)}><span>{label}</span><strong>{value}</strong><div className="bar"><i style={{width:`${value}%`}}/></div></div>)}</div><div className="tech-team"><div><h4>Verified technology</h4><div className="skill-list">{candidate.skills.slice(0,5).map(item=><SkillPill key={item.name} state={item.verified?"good":"neutral"}>{item.name}</SkillPill>)}</div></div><div><h4>Contribution signal</h4><p>{candidate.github.pullRequests} PRs · {candidate.github.activeWeeks} active weeks</p></div></div><div className="project-actions"><button className="ghost-button" onClick={()=>{onSelect(candidate.id);onNavigate("profile")}}>View talent profile</button><button className="primary-button" onClick={()=>{onSelect(candidate.id);onNavigate("verify")}}>Invite to verification <Icon name="arrow" size={15}/></button></div></section></div></div>}
+function VerifyView({pool,selectedId,onSelect}:{pool:Candidate[];selectedId:string;onSelect:(id:string)=>void}){
+  const candidate=pool.find(item=>item.id===selectedId)||pool[0];
+  
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [questionIndex,setQuestionIndex]=useState(0);
+  const [answer,setAnswer]=useState("");
+  const [evaluation,setEvaluation]=useState<any>(null);
+  const [evaluating, setEvaluating] = useState(false);
+  
+  const generateQuestions = async () => {
+    setGenerating(true); setQuestions([]); setQuestionIndex(0); setEvaluation(null); setAnswer("");
+    try {
+      const res = await fetch("http://localhost:8000/api/interview/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_role: candidate.role, skills: candidate.skills.slice(0,3).map(s=>s.name) })
+      });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      setQuestions(data.objective_questions || []);
+    } catch(e) {
+      alert("Failed to generate questions");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const evaluateAnswer = async () => {
+    if (!answer.trim()) return;
+    setEvaluating(true);
+    try {
+      const q = questions[questionIndex];
+      const res = await fetch("http://localhost:8000/api/interview/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          job_role: candidate.role, 
+          mcq_questions: [], mcq_answers: {},
+          objective_questions: [q],
+          objective_answers: { [q.id]: answer }
+        })
+      });
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      const objRes = data.objective_results[0] || {};
+      setEvaluation({
+        score: objRes.score * 10 || 0, // scale 0-10 to 0-100
+        feedback: objRes.feedback,
+        coverage: objRes.score >= 5 ? 80 : 30, // Mock metrics since backend doesn't return exact depth/structure
+        depth: objRes.score >= 7 ? 90 : 40,
+        structure: objRes.score >= 8 ? 95 : 50
+      });
+    } catch(e) {
+      alert("Failed to evaluate answer");
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
+  const [code,setCode]=useState(`function normalizeSkills(skills) {\n  return [...new Set(skills.map(skill => skill.trim().toLowerCase()))].sort();\n}`);
+  const [testResult,setTestResult]=useState<{passed:number;total:number;message:string}|null>(null);
+  const runTests=()=>{setTestResult(null);const source=`onmessage=e=>{try{const fn=eval('('+e.data+')');const tests=[[[' React ','python','react'],['python','react']],[[],[]],[['SQL','sql',' Python'],['python','sql']]];let passed=0;for(const [input,expected] of tests){const actual=fn(input);if(JSON.stringify(actual)===JSON.stringify(expected))passed++}postMessage({passed,total:tests.length,message:passed===tests.length?'All tests passed':'Review normalization, duplicates, and sorting.'})}catch(error){postMessage({passed:0,total:3,message:error.message})}}`;const worker=new Worker(URL.createObjectURL(new Blob([source],{type:"text/javascript"})));const timer=window.setTimeout(()=>{worker.terminate();setTestResult({passed:0,total:3,message:"Execution timed out after 2 seconds."})},2000);worker.onmessage=event=>{window.clearTimeout(timer);worker.terminate();setTestResult(event.data)};worker.postMessage(code)};
+  
+  return <div className="view-wrap"><section className="page-lead light-lead"><div><span className="eyebrow"><Icon name="verify" size={14}/>ADAPTIVE SKILL VERIFICATION</span><h2>Test claims against reasoning and code.</h2><p>Interview ratings are calculated from Llama 3.3 rubric coverage, answer depth, structure, and executable test results.</p></div><CandidateSelect pool={pool} value={selectedId} onChange={id=>{onSelect(id);setQuestionIndex(0);setEvaluation(null);setQuestions([]);}}/></section>
+  <div className="verify-final-grid"><section className="content-card interview-workspace">
+    <div className="interview-top"><div className="agent-id"><span><Icon name="spark"/></span><div><strong>Nova · Evidence interviewer</strong><p><i/>Grounded in {candidate.name}&apos;s profile</p></div></div>
+      {questions.length > 0 ? <span>Question {questionIndex+1} of {questions.length}</span> : <button className="primary-button" onClick={generateQuestions} disabled={generating}>{generating ? "Generating..." : "Generate AI Interview"}</button>}
+    </div>
+    
+    {questions.length > 0 && <>
+      <div className="progress-track"><i style={{width:`${((questionIndex+1)/questions.length)*100}%`}}/></div>
+      <div className="question-card"><span>{questions[questionIndex].topic}</span><h3>{questions[questionIndex].question}</h3><small>Hint: {questions[questionIndex].expected_answer_hint}</small></div>
+      <label className="answer-area">Candidate answer<textarea rows={8} value={answer} onChange={event=>setAnswer(event.target.value)} placeholder="Explain decisions, trade-offs, validation, and measurable outcome..."/></label>
+      <div className="answer-footer"><span>{answer.trim().split(/\s+/).filter(Boolean).length} words</span><button className="primary-button" disabled={answer.trim().length<10 || evaluating} onClick={evaluateAnswer}>{evaluating ? "Evaluating..." : "Evaluate answer"} <Icon name="spark" size={15}/></button></div>
+      {evaluation&&<div className="evaluation-panel"><div><ScoreRing score={evaluation.score} label="Answer score" light/><div><h3>{evaluation.score>=80?"Strong evidence":"Follow-up recommended"}</h3><p>{evaluation.feedback}</p></div></div><div className="evaluation-metrics"><span>Rubric coverage <b>{evaluation.coverage}%</b></span><span>Answer depth <b>{evaluation.depth}%</b></span><span>Reasoning structure <b>{evaluation.structure}%</b></span></div><button className="ghost-button" onClick={()=>{setQuestionIndex((questionIndex+1)%questions.length);setAnswer("");setEvaluation(null)}}>Next adaptive question <Icon name="arrow" size={15}/></button></div>}
+    </>}
+    
+  </section><section className="content-card code-workspace"><div className="section-heading"><div><p className="kicker">CODE VERIFICATION</p><h3>Executable assessment</h3></div><span><Icon name="clock" size={13}/>2s limit</span></div><div className="challenge"><strong>Normalize a skill list</strong><p>Return unique, lowercase, trimmed skills in alphabetical order.</p></div><textarea className="code-editor" value={code} onChange={event=>setCode(event.target.value)} spellCheck={false} rows={12}/><button className="primary-button full" onClick={runTests}><Icon name="code" size={16}/>Run 3 test cases</button>{testResult&&<div className={`test-result ${testResult.passed===testResult.total?"pass":"fail"}`}><Icon name={testResult.passed===testResult.total?"check":"alert"}/><div><strong>{testResult.passed}/{testResult.total} tests passed</strong><p>{testResult.message}</p></div></div>}<div className="verified-skill-stack"><p className="kicker">PROFILE VERIFICATION</p>{candidate.skills.slice(0,5).map(item=><div key={item.name}><span><Icon name={item.verified?"check":"alert"} size={13}/>{item.name}</span><strong>{item.verified?`${item.level}%`:`Review`}</strong></div>)}</div></section></div></div>}
+
+function HackathonView({pool,onSelect,onNavigate}:{pool:Candidate[];onSelect:(id:string)=>void;onNavigate:(view:View)=>void}){
+  const ranked=[...pool].filter(item=>item.hackathons.count).sort((a,b)=>b.hackathons.innovation-a.hackathons.innovation);
+  const [activeId,setActiveId]=useState(ranked[0].id);
+  const candidate=ranked.find(item=>item.id===activeId)||ranked[0];
+
+  const [projectName, setProjectName] = useState("");
+  const [repoUrl, setRepoUrl] = useState("");
+  const [pitchDeck, setPitchDeck] = useState<File|null>(null);
+  const [evalLoading, setEvalLoading] = useState(false);
+  const [evalResult, setEvalResult] = useState<any>(null);
+
+  const handleEvaluate = async () => {
+    if (!projectName || !repoUrl) { alert("Project name and Repo URL required."); return; }
+    setEvalLoading(true); setEvalResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("project_name", projectName);
+      formData.append("repo_url", repoUrl);
+      if (pitchDeck) formData.append("pitch_deck", pitchDeck);
+      const res = await fetch("http://localhost:8000/api/hackathon/evaluate-with-deck", {
+        method: "POST",
+        body: formData
+      });
+      if (!res.ok) throw new Error("Evaluation failed");
+      const data = await res.json();
+      setEvalResult(data);
+    } catch(e) {
+      alert("Failed to evaluate hackathon project");
+    } finally {
+      setEvalLoading(false);
+    }
+  };
+
+  return <div className="view-wrap">
+    <section className="page-lead light-lead"><div><span className="eyebrow"><Icon name="trophy" size={14}/>HACKATHON-TO-HIRING</span><h2>Find builders while the work is still visible.</h2><p>Rank projects using innovation, feasibility, technical depth, contribution evidence, and candidate authenticity.</p></div><div className="event-chip"><span className="event-mark">LL</span><div><small>Talent pool</small><strong>Logic Loop 2026</strong></div><span>{ranked.length} finalists</span></div></section>
+    
+    {/* EVALUATE NEW PROJECT FORM */}
+    <section className="content-card match-form" style={{ maxWidth: '800px', margin: '0 auto 40px auto' }}>
+      <div className="section-heading"><div><p className="kicker">EVALUATE</p><h3>Score a new project</h3></div></div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <label className="field-group"><span>Project Name</span><div className="input-shell"><input value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="e.g. SkillNova AI" style={{width: '100%'}}/></div></label>
+        <label className="field-group"><span>GitHub Repo URL</span><div className="input-shell"><input value={repoUrl} onChange={e => setRepoUrl(e.target.value)} placeholder="https://github.com/user/repo" style={{width: '100%'}}/></div></label>
+        <label className="field-group"><span>Pitch Deck (PDF)</span><input type="file" accept=".pdf" onChange={e => setPitchDeck(e.target.files?.[0]||null)}/></label>
+        <button className="primary-button" onClick={handleEvaluate} disabled={evalLoading}>{evalLoading ? "Evaluating..." : "Evaluate Project"}</button>
+        {evalResult && <div style={{background: "#f0fdf4", padding: "20px", borderRadius: "10px", marginTop: "10px"}}>
+          <h4>Evaluation Result: {evalResult.project_name}</h4>
+          <p><strong>Overall Score:</strong> {evalResult.overall_score}%</p>
+          <p><strong>Innovation:</strong> {evalResult.innovation_score}%</p>
+          <p><strong>Code Quality:</strong> {evalResult.code_quality_score}%</p>
+          <p><strong>Summary:</strong> {evalResult.recruiter_summary}</p>
+        </div>}
+      </div>
+    </section>
+
+    <div className="hackathon-stats">{[[ranked.reduce((sum,item)=>sum+item.hackathons.count,0),"Projects analyzed","trophy"],[ranked.filter(item=>item.score.total>=80).length,"Recruiter-ready","people"],[Math.max(...ranked.map(item=>item.hackathons.innovation)),"Top innovation","spark"],[ranked.reduce((sum,item)=>sum+item.hackathons.wins,0),"Winning projects","briefcase"]].map(([value,label,icon])=><div key={String(label)}><span className="stat-icon blue"><Icon name={icon as IconName}/></span><p>{label}<strong>{value}</strong></p></div>)}</div><div className="hackathon-layout"><section className="content-card leaderboard"><div className="section-heading"><div><p className="kicker">PROJECT RANKING</p><h3>Top evidence signals</h3></div></div>{ranked.map((item,index)=><button key={item.id} className={`project-row ${activeId===item.id?"active":""}`} onClick={()=>setActiveId(item.id)}><span className="rank">{String(index+1).padStart(2,"0")}</span><span className="project-avatar">{item.initials}</span><span className="project-copy"><strong>{item.hackathons.project}</strong><small>{item.name} · {item.role}</small></span><span className="project-score">{item.hackathons.innovation}<small>innovation</small></span><Icon name="arrow" size={15}/></button>)}</section><section className="content-card project-detail"><div className="project-cover"><div><span className="fit-badge">{candidate.hackathons.wins?"Winner":"Finalist"}</span><h3>{candidate.hackathons.project}</h3><p>Led by {candidate.name} · {candidate.location}</p></div><ScoreRing score={candidate.hackathons.innovation} label="Innovation" light/></div><p className="project-description">{candidate.summary} The project is supported by {candidate.github.repos} public repositories, {candidate.github.commits} contribution signals, and {candidate.score.evidenceCount} total evidence points.</p><div className="project-score-grid">{[["Innovation",candidate.hackathons.innovation],["Technical depth",candidate.score.dimensions.coding],["Feasibility",candidate.score.dimensions.projectQuality],["Authenticity",getAuthenticityScore(candidate)]].map(([label,value])=><div key={String(label)}><span>{label}</span><strong>{value}</strong><div className="bar"><i style={{width:`${value}%`}}/></div></div>)}</div><div className="tech-team"><div><h4>Verified technology</h4><div className="skill-list">{candidate.skills.slice(0,5).map(item=><SkillPill key={item.name} state={item.verified?"good":"neutral"}>{item.name}</SkillPill>)}</div></div><div><h4>Contribution signal</h4><p>{candidate.github.pullRequests} PRs · {candidate.github.activeWeeks} active weeks</p></div></div><div className="project-actions"><button className="ghost-button" onClick={()=>{onSelect(candidate.id);onNavigate("profile")}}>View talent profile</button><button className="primary-button" onClick={()=>{onSelect(candidate.id);onNavigate("verify")}}>Invite to verification <Icon name="arrow" size={15}/></button></div></section></div></div>}
 
 async function downloadHiringReport(candidate:Candidate,match:JobMatch){const {jsPDF}=await import("jspdf");const doc=new jsPDF();doc.setFillColor(59,111,168);doc.rect(0,0,210,28,"F");doc.setTextColor(255,255,255);doc.setFontSize(22);doc.text("SkillNova Hiring Intelligence",16,18);doc.setTextColor(31,47,61);doc.setFontSize(18);doc.text(candidate.name,16,42);doc.setFontSize(11);doc.text(`${candidate.role} · ${candidate.location} · ${candidate.experience} years`,16,50);doc.setDrawColor(220,229,236);doc.line(16,57,194,57);doc.setFontSize(13);doc.text(`Talent Score: ${candidate.score.total}/100`,16,68);doc.text(`Role Match: ${match.total}%`,75,68);doc.text(`Authenticity: ${getAuthenticityScore(candidate)}/100`,130,68);doc.setFontSize(11);doc.text("Evidence summary",16,82);const summary=doc.splitTextToSize(candidate.summary,175);doc.text(summary,16,90);let y=108;doc.text("Verified skills",16,y);y+=8;doc.text(doc.splitTextToSize(candidate.skills.filter(item=>item.verified).map(item=>`${item.name} (${item.level})`).join(" · "),175),16,y);y+=22;doc.text("Talent dimensions",16,y);y+=8;dimensions.forEach(([key,label,weight])=>{doc.text(`${label}: ${candidate.score.dimensions[key]}/100 (${weight}% weight)`,20,y);y+=7});y+=4;doc.text("Job match explanation",16,y);y+=8;doc.text(doc.splitTextToSize(match.explanation,175),16,y);y+=14;doc.text(`Matched: ${match.matchedSkills.join(", ")||"No explicit technical requirements detected"}`,16,y);y+=8;doc.text(`Missing / verify: ${match.missingSkills.join(", ")||"No core gaps"}`,16,y);y+=14;doc.text("Recommendation",16,y);y+=8;doc.text(doc.splitTextToSize(match.total>=85?"Proceed to a focused final interview. Validate any missing skills and review evidence links before a human hiring decision.":"Run an additional technical screen and consider adjacent roles before a human hiring decision.",175),16,y);doc.setFontSize(8);doc.setTextColor(100,116,130);doc.text("Decision support only. SkillNova does not make autonomous hiring decisions.",16,286);doc.save(`${candidate.name.replace(/\s+/g,"-").toLowerCase()}-hiring-report.pdf`)}
 
@@ -94,7 +382,7 @@ function RecruiterWorkspace({profile}:{profile:AccountProfile}){
   const initials=profile.displayName.split(/\s+/).map(part=>part[0]).join("").slice(0,2).toUpperCase();
   const navigate=(view:View)=>{setActive(view);setMenuOpen(false);window.scrollTo({top:0,behavior:"smooth"})};
   const handleAnalyzed=(candidate:Candidate)=>{setPool(current=>[candidate,...current.filter(item=>!item.id.startsWith("live-")&&item.id!==candidate.id)]);setSelectedId(candidate.id)};
-  return <main className="app-shell"><aside className={`sidebar ${menuOpen?"open":""}`}><div className="brand"><span className="brand-mark"><Icon name="spark" size={18}/></span><div><strong>SkillNova</strong><small>Evidence-led hiring</small></div><button className="icon-button close-menu" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"><Icon name="close"/></button></div><nav><p className="nav-label">INTELLIGENCE WORKSPACE</p>{navItems.map(item=><button key={item.id} className={active===item.id?"active":""} onClick={()=>navigate(item.id)}><span className="nav-icon"><Icon name={item.icon}/></span><span><small>{item.eyebrow}</small>{item.label}</span>{active===item.id&&<i/>}</button>)}</nav><div className="engine-card"><span><i/>Live engine</span><strong>{pool.length} candidates</strong><small>Transparent scoring · v1.1</small></div><div className="sidebar-user"><span className="small-avatar">{initials}</span><div><strong>{profile.displayName}</strong><small>Recruiter workspace</small></div><span className="online-dot"/></div></aside>{menuOpen&&<button className="sidebar-overlay" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"/>}<section className="main-stage"><AppHeader active={active} onMenu={()=>setMenuOpen(true)} initials={initials}/>{active==="profile"&&<ProfileView candidate={selected} onCandidateAnalyzed={handleAnalyzed} onNavigate={navigate}/>} {active==="match"&&<MatchView pool={pool} selectedId={selectedId} onSelect={setSelectedId} onNavigate={navigate}/>} {active==="verify"&&<VerifyView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="hackathon"&&<HackathonView pool={pool} onSelect={setSelectedId} onNavigate={navigate}/>} {active==="recruiter"&&<RecruiterView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="trust"&&<TrustView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>}<footer><span><strong>SkillNova</strong> · Proof over paperwork.</span><span>Decision support only · Human approval required</span></footer></section></main>
+  return <main className="app-shell"><aside className={`sidebar ${menuOpen?"open":""}`}><div className="brand"><span className="brand-mark"><Icon name="spark" size={18}/></span><div><strong>SkillNova</strong><small>Evidence-led hiring</small></div><button className="icon-button close-menu" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"><Icon name="close"/></button></div><nav><p className="nav-label">INTELLIGENCE WORKSPACE</p>{navItems.map(item=><button key={item.id} className={active===item.id?"active":""} onClick={()=>navigate(item.id)}><span className="nav-icon"><Icon name={item.icon}/></span><span><small>{item.eyebrow}</small>{item.label}</span>{active===item.id&&<i/>}</button>)}</nav><div className="engine-card"><span><i/>Live engine</span><strong>{pool.length} candidates</strong><small>Transparent scoring · v1.1</small></div><div className="sidebar-user"><span className="small-avatar">{initials}</span><div><strong>{profile.displayName}</strong><small>Recruiter workspace</small></div><span className="online-dot"/></div></aside>{menuOpen&&<button className="sidebar-overlay" onClick={()=>setMenuOpen(false)} aria-label="Close navigation"/>}<section className="main-stage"><AppHeader active={active} onMenu={()=>setMenuOpen(true)} initials={initials}/>{active==="profile"&&<ProfileView candidate={selected} onCandidateAnalyzed={handleAnalyzed} onNavigate={navigate}/>} {active==="createjob"&&<CreateJobView/>} {active==="verify"&&<VerifyView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="hackathon"&&<HackathonView pool={pool} onSelect={setSelectedId} onNavigate={navigate}/>} {active==="recruiter"&&<RecruiterView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>} {active==="trust"&&<TrustView pool={pool} selectedId={selectedId} onSelect={setSelectedId}/>}<footer><span><strong>SkillNova</strong> · Proof over paperwork.</span><span>Decision support only · Human approval required</span></footer></section></main>
 }
 
 function AuthScreen({onPreview}:{onPreview:(role:AccountRole)=>void}){

@@ -36,7 +36,10 @@ type GithubContentResponse = { name: string };
 export async function fetchGithubEvidence(
   username: string,
 ): Promise<{ name?: string; github: CandidateBase["github"] }> {
-  const headers = { Accept: "application/vnd.github+json" };
+  const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
+  if (process.env.NEXT_PUBLIC_GITHUB_TOKEN) {
+    headers["Authorization"] = `Bearer ${process.env.NEXT_PUBLIC_GITHUB_TOKEN}`;
+  }
   const [userResponse, reposResponse, eventsResponse] = await Promise.all([
     fetch(`https://api.github.com/users/${encodeURIComponent(username)}`, { headers }),
     fetch(`https://api.github.com/users/${encodeURIComponent(username)}/repos?per_page=100&sort=updated`, { headers }),

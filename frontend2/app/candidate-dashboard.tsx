@@ -163,19 +163,109 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
     return [...counts.entries()].map(([skill,data])=>({skill,...data})).sort((a,b)=>b.count-a.count||a.skill.localeCompare(b.skill));
   },[rankedJobs]);
 
-  const syncEvidence=async()=>{
+  const [backendScores, setBackendScores] = useState<{resume?: number, github?: number, total?: number}>({});
+
+  const analyzeResume=async()=>{
+    if(!resumeFile){setMessage("Choose a resume first.");return;}
+    setSyncing(true);setMessage("Reading resume and recalculating...");
+    try{
+      const formData = new FormData();
+      formData.append("file", resumeFile);
+      const response = await fetch("http://localhost:8000/api/analyze/resume", { method: "POST", body: formData });
+      let backMsg = "";
+      if (response.ok) {
+        const resData = await response.json();
+        backMsg = `[Backend Resume Score: ${resData.analysis.resume_total_score}] `;
+        setBackendScores(prev => ({...prev, resume: resData.analysis.resume_total_score}));
+      }
+      const resume=parseResumeText(await extractFileText(resumeFile));
+      const merged=mergeLiveCandidate(candidate,resume,candidate.github,profile.displayName);
+      const adjustedBase:CandidateBase={...merged,role:profile.professionalTitle,location:profile.location||merged.location};
+      setCandidate({...adjustedBase,score:calculateTalentScore(adjustedBase)});
+      setResumeConnected(true);
+      setMessage(`${backMsg}Profile recalculated from resume.`);
+    }catch(error){setMessage(error instanceof Error?error.message:"Analysis failed.");}
+    finally{setSyncing(false);}
+  };
+
+  const analyzeGithub=async()=>{
+    if(!githubUsername.trim()){setMessage("Add a GitHub username first.");return;}
+    setSyncing(true);setMessage("Reading GitHub and recalculating...");
+    try{
+      const response = await fetch("http://localhost:8000/api/analyze/github", { 
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: githubUsername.trim() }) 
+      });
+      let backMsg = "";
+      if (response.ok) {
+        const resData = await response.json();
+        backMsg = `[Backend GitHub Score: ${resData.analysis.github_total_score}] `;
+        setBackendScores(prev => ({...prev, github: resData.analysis.github_total_score}));
+      }
+      const github=await fetchGithubEvidence(githubUsername.trim());
+      const merged=mergeLiveCandidate(candidate,null,github.github,profile.displayName);
+      const adjustedBase:CandidateBase={...merged,role:profile.professionalTitle,location:profile.location||merged.location,source:"live"};
+      setCandidate({...adjustedBase,score:calculateTalentScore(adjustedBase)});
+      setGithubConnected(true);
+      setMessage(`${backMsg}Profile recalculated from GitHub.`);
+    }catch(error){setMessage(error instanceof Error?error.message:"Analysis failed.");}
+    finally{setSyncing(false);}
+  };
+
+  const analyzeTotal=async()=>{
     if(!resumeFile&&!githubUsername.trim()){setMessage("Choose a resume or add a GitHub username first.");return;}
     setSyncing(true);setMessage("Reading evidence and recalculating your profile…");
     try{
+      const formData = new FormData();
+      if(resumeFile) formData.append("file", resumeFile);
+      if(githubUsername.trim()) formData.append("github_username", githubUsername.trim());
+      const response = await fetch("http://localhost:8000/api/analyze/full", { method: "POST", body: formData });
+      let backMsg = "";
+      if (response.ok) {
+        const resData = await response.json();
+        backMsg = `[Backend Total Score: ${resData.scores_summary.combined_total_score}] Github: ${resData.scores_summary.github_total_score}, Resume: ${resData.scores_summary.resume_total_score} `;
+        setBackendScores(prev => ({
+          ...prev, 
+          total: resData.scores_summary.combined_total_score,
+          github: resData.scores_summary.github_total_score,
+          resume: resData.scores_summary.resume_total_score
+        }));
+      }
       const resume=resumeFile?parseResumeText(await extractFileText(resumeFile)):null;
       const github=githubUsername.trim()?await fetchGithubEvidence(githubUsername.trim()):null;
       const merged=mergeLiveCandidate(candidate,resume,github?.github||candidate.github,profile.displayName);
       const adjustedBase:CandidateBase={...merged,role:profile.professionalTitle,location:profile.location||merged.location,source:github?"live":merged.source};
       setCandidate({...adjustedBase,score:calculateTalentScore(adjustedBase)});
-      setResumeConnected(Boolean(resume));setGithubConnected(Boolean(github));
-      setMessage(`Profile recalculated from ${resume?`${resume.skills.length} resume skills`:`existing resume signals`}${github?` and ${github.github.repos} original repositories`:""}.`);
+      if(resume) setResumeConnected(true);
+      if(github) setGithubConnected(true);
+      setMessage(`${backMsg}Profile recalculated.`);
     }catch(error){setMessage(error instanceof Error?error.message:"Evidence analysis failed. Please try again.");}
     finally{setSyncing(false);}
+  };
+  const [backendMatch, setBackendMatch] = useState<{score: number, matched: string[], missing: string[]} | null>(null);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const runBackendMatch = async () => {
+    if(!resumeFile){ alert("Please upload a resume first to run backend matching."); return; }
+    setMatchLoading(true);
+    try {
+      const text = await extractFileText(resumeFile);
+      const response = await fetch("http://localhost:8000/api/matchmaker/evaluate-text", { 
+        method: "POST", 
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cv_text: text, jd_text: selectedJob.job.description })
+      });
+      if (!response.ok) throw new Error("Match failed");
+      const resData = await response.json();
+      setBackendMatch({
+        score: resData.match_percentage,
+        matched: resData.matched_skills,
+        missing: resData.missing_skills
+      });
+    } catch(e) {
+      alert("Backend match failed");
+    } finally {
+      setMatchLoading(false);
+    }
   };
 
   const initials=profile.displayName.split(/\s+/).map((part)=>part[0]).join("").slice(0,2).toUpperCase();
@@ -192,11 +282,52 @@ export function CandidateDashboard({ profile }: { profile: AccountProfile }) {
       {active==="overview"&&<div className="candidate-page">
         <section className="candidate-hero"><div className="candidate-hero-copy"><span className="candidate-eyebrow">YOUR VERIFIED TALENT IDENTITY</span><h2>See what your evidence says about you.</h2><p>Your score is recalculated from resume signals, public GitHub work, project quality, consistency and verification—not from profile keywords alone.</p><div className="candidate-hero-actions"><button className="candidate-primary" onClick={()=>setActive("matches")}>Explore {rankedJobs.length} job matches</button><button className="candidate-secondary" onClick={()=>setActive("exports")}>Export profile</button></div></div><div className="candidate-score-panel"><ScoreRing score={candidate.score.total} label="Talent score"/><div><span>{candidate.score.confidence}% confidence</span><span>{candidate.score.evidenceCount} evidence signals</span><span>{authenticity}/100 authenticity</span></div></div></section>
         <section className="candidate-stat-row">{[[`${rankedJobs[0].match.total}%`,"Best job match"],[verifiedSkills.length,"Verified skills"],[gapSummary.length,"Priority skill gaps"],[verificationProgress+"%","Profile verified"]].map(([value,label])=><article key={String(label)}><strong>{value}</strong><span>{label}</span></article>)}</section>
-        <section className="candidate-evidence-connect"><div><p className="candidate-kicker">LIVE EVIDENCE</p><h3>Recalculate with your resume and GitHub</h3><p>Files are parsed in your browser. GitHub analysis uses public repositories and contribution events.</p></div><label><span>Resume PDF</span><input type="file" accept=".pdf,.txt" onChange={(event)=>setResumeFile(event.target.files?.[0]||null)}/><small>{resumeFile?.name||"No file selected"}</small></label><label><span>GitHub username</span><input value={githubUsername} onChange={(event)=>setGithubUsername(event.target.value)} placeholder="your-username"/></label><button className="candidate-primary" onClick={syncEvidence} disabled={syncing}>{syncing?"Calculating…":"Analyze & recalculate"}</button><div className={`candidate-evidence-message ${/failed|not found|limit/i.test(message)?"error":""}`}>{message}</div></section>
+        <section className="candidate-card" style={{padding: '25px', display: 'flex', flexDirection: 'column', gap: '20px'}}>
+          <div><p className="candidate-kicker">LIVE EVIDENCE</p><h3>Recalculate with your resume and GitHub</h3><p>Files are parsed in your browser. GitHub analysis uses public repositories and contribution events.</p></div>
+          <div style={{display: 'flex', gap: '20px', alignItems: 'center'}}>
+            <label className="field-group" style={{flex: 1}}><span>Resume PDF</span><div className="input-shell"><input type="file" accept=".pdf,.txt" onChange={(event)=>setResumeFile(event.target.files?.[0]||null)}/></div><small>{resumeFile?.name||"No file selected"}</small></label>
+            <label className="field-group" style={{flex: 1}}><span>GitHub username</span><div className="input-shell"><input value={githubUsername} onChange={(event)=>setGithubUsername(event.target.value)} placeholder="your-username" style={{width: '100%'}}/></div></label>
+          </div>
+          <div style={{display: 'flex', gap: '15px', width: '100%'}}>
+            <button className="candidate-primary" style={{flex: 1}} onClick={analyzeGithub} disabled={syncing||!githubUsername.trim()}>
+              {syncing?"Calculating...":"Analyze GitHub"}
+            </button>
+            <button className="candidate-primary" style={{flex: 1}} onClick={analyzeResume} disabled={syncing||!resumeFile}>
+              {syncing?"Calculating...":"Analyze Resume"}
+            </button>
+            <button className="candidate-primary" style={{flex: 1}} onClick={analyzeTotal} disabled={syncing||(!resumeFile&&!githubUsername.trim())}>
+              {syncing?"Calculating...":"Calculate Total Score"}
+            </button>
+          </div>
+          <div className={`candidate-evidence-message ${/failed|not found|limit/i.test(message)?"error":""}`}>{message}</div>
+          
+          {(backendScores.resume !== undefined || backendScores.github !== undefined || backendScores.total !== undefined) && (
+            <div style={{display: 'flex', gap: '30px', marginTop: '10px', justifyContent: 'center', padding: '15px'}}>
+              {backendScores.resume !== undefined && (
+                <ScoreRing score={backendScores.resume} label="Resume Score" />
+              )}
+              {backendScores.github !== undefined && (
+                <ScoreRing score={backendScores.github} label="GitHub Score" />
+              )}
+              {backendScores.total !== undefined && (
+                <ScoreRing score={backendScores.total} label="Total Score" />
+              )}
+            </div>
+          )}
+        </section>
         <div className="candidate-two-column"><section className="candidate-card"><div className="candidate-section-head"><div><p className="candidate-kicker">TALENT PROFILE</p><h3>Seven explainable dimensions</h3></div><span>Formula v1.1</span></div>{dimensions.map(([key,label,weight])=><MetricBar key={key} label={label} value={candidate.score.dimensions[key]} detail={`${weight}% weight`}/>)}<div className="candidate-formula">Total = Coding×.25 + Projects×.20 + Problem solving×.15 + Consistency×.12 + Leadership×.10 + Innovation×.10 + Community×.08</div></section><section className="candidate-card"><div className="candidate-section-head"><div><p className="candidate-kicker">EVIDENCE BLEND</p><h3>Resume + GitHub intelligence</h3></div><strong className="candidate-big-number">{blend.combined}</strong></div><div className="candidate-blend"><article><span>Resume analysis</span><strong>{blend.resume}</strong><small>60% of evidence blend</small></article><article><span>GitHub analysis</span><strong>{blend.github}</strong><small>40% of evidence blend</small></article></div><div className="candidate-formula">Branch2 method: Combined evidence = Resume score×.60 + GitHub score×.40</div><div className="candidate-section-head candidate-job-head"><div><p className="candidate-kicker">TOP OPPORTUNITIES</p><h3>Ranked for your evidence</h3></div><button onClick={()=>setActive("matches")}>View all</button></div>{rankedJobs.slice(0,3).map(({job,match},index)=><button className="candidate-job-compact" key={job.id} onClick={()=>{setSelectedJobId(job.id);setActive("matches")}}><span>{index+1}</span><div><strong>{job.title}</strong><small>{job.company} · {job.location}</small></div><b>{match.total}%<small>match</small></b></button>)}</section></div>
       </div>}
 
-      {active==="matches"&&<div className="candidate-page"><section className="candidate-page-lead"><div><span className="candidate-eyebrow">EXPLAINABLE JOB MATCHING</span><h2>Opportunities ranked for your real capabilities.</h2><p>The MODELS method contributes 60% semantic relevance and 40% explicit skill coverage inside every fit calculation.</p></div><ScoreRing score={rankedJobs[0].match.total} label="Best match"/></section><div className="candidate-match-layout"><section className="candidate-card candidate-job-list"><div className="candidate-section-head"><div><p className="candidate-kicker">RANKED FOR YOU</p><h3>{rankedJobs.length} active roles</h3></div></div>{rankedJobs.map(({job,match},index)=><button key={job.id} className={selectedJob.job.id===job.id?"active":""} onClick={()=>setSelectedJobId(job.id)}><span className="candidate-rank">{String(index+1).padStart(2,"0")}</span><div><strong>{job.title}</strong><small>{job.company} · {job.location} · {job.mode}</small><p>{match.matchedSkills.slice(0,4).join(" · ")||"Adjacent opportunity"}</p></div><b>{match.total}<small>% fit</small></b></button>)}</section><section className="candidate-card candidate-match-detail"><div className="candidate-match-title"><div><span>{selectedJob.job.company}</span><h3>{selectedJob.job.title}</h3><p>{selectedJob.job.location} · {selectedJob.job.mode} · {selectedJob.job.salary}</p></div><ScoreRing score={selectedJob.match.total} label="Role match"/></div><p className="candidate-match-copy">{selectedJob.match.explanation}</p><div className="candidate-model-split"><article><span>Semantic relevance</span><strong>{selectedJob.match.semanticRelevance}%</strong><small>60% model weight</small></article><article><span>Skill coverage</span><strong>{selectedJob.match.skillCoverage}%</strong><small>40% model weight</small></article></div>{[["Hybrid model fit",selectedJob.match.modelFit],["Project relevance",selectedJob.match.projectRelevance],["Experience fit",selectedJob.match.experienceFit],["Evidence confidence",selectedJob.match.evidenceConfidence]].map(([label,value])=><MetricBar key={String(label)} label={String(label)} value={Number(value)}/>)}<div className="candidate-skill-columns"><div><h4>Matched skills</h4>{selectedJob.match.matchedSkills.map((skill)=><span className="candidate-skill good" key={skill}>{skill}</span>)}</div><div><h4>Missing skills</h4>{selectedJob.match.missingSkills.length?selectedJob.match.missingSkills.map((skill)=><span className="candidate-skill gap" key={skill}>{skill}</span>):<span className="candidate-skill good">No core gaps</span>}</div></div><button className="candidate-primary full">Save opportunity</button></section></div></div>}
+      {active==="matches"&&<div className="candidate-page"><section className="candidate-page-lead"><div><span className="candidate-eyebrow">EXPLAINABLE JOB MATCHING</span><h2>Opportunities ranked for your real capabilities.</h2><p>The MODELS method contributes 60% semantic relevance and 40% explicit skill coverage inside every fit calculation.</p></div><ScoreRing score={rankedJobs[0].match.total} label="Best match"/></section><div className="candidate-match-layout"><section className="candidate-card candidate-job-list"><div className="candidate-section-head"><div><p className="candidate-kicker">RANKED FOR YOU</p><h3>{rankedJobs.length} active roles</h3></div></div>{rankedJobs.map(({job,match},index)=><button key={job.id} className={selectedJob.job.id===job.id?"active":""} onClick={()=>{setSelectedJobId(job.id);setBackendMatch(null);}}><span className="candidate-rank">{String(index+1).padStart(2,"0")}</span><div><strong>{job.title}</strong><small>{job.company} · {job.location} · {job.mode}</small><p>{match.matchedSkills.slice(0,4).join(" · ")||"Adjacent opportunity"}</p></div><b>{match.total}<small>% fit</small></b></button>)}</section><section className="candidate-card candidate-match-detail"><div className="candidate-match-title"><div><span>{selectedJob.job.company}</span><h3>{selectedJob.job.title}</h3><p>{selectedJob.job.location} · {selectedJob.job.mode} · {selectedJob.job.salary}</p></div>
+        <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
+          <ScoreRing score={selectedJob.match.total} label="Local Match"/>
+          {backendMatch && <ScoreRing score={backendMatch.score} label="Backend ML Match"/>}
+        </div>
+        </div><p className="candidate-match-copy">{selectedJob.match.explanation}</p><div className="candidate-model-split"><article><span>Semantic relevance</span><strong>{selectedJob.match.semanticRelevance}%</strong><small>60% model weight</small></article><article><span>Skill coverage</span><strong>{selectedJob.match.skillCoverage}%</strong><small>40% model weight</small></article></div>{[["Hybrid model fit",selectedJob.match.modelFit],["Project relevance",selectedJob.match.projectRelevance],["Experience fit",selectedJob.match.experienceFit],["Evidence confidence",selectedJob.match.evidenceConfidence]].map(([label,value])=><MetricBar key={String(label)} label={String(label)} value={Number(value)}/>)}<div className="candidate-skill-columns"><div><h4>Matched skills</h4>{(backendMatch?backendMatch.matched:selectedJob.match.matchedSkills).map((skill)=><span className="candidate-skill good" key={skill}>{skill}</span>)}</div><div><h4>Missing skills</h4>{(backendMatch?backendMatch.missing:selectedJob.match.missingSkills).length?(backendMatch?backendMatch.missing:selectedJob.match.missingSkills).map((skill)=><span className="candidate-skill gap" key={skill}>{skill}</span>):<span className="candidate-skill good">No core gaps</span>}</div></div>
+        <button className="candidate-primary full" onClick={runBackendMatch} disabled={matchLoading} style={{marginBottom: "10px"}}>
+          {matchLoading ? "Calculating..." : "Calculate ML Match (Backend)"}
+        </button>
+        <button className="candidate-secondary full">Save opportunity</button></section></div></div>}
 
       {active==="gaps"&&<div className="candidate-page"><section className="candidate-page-lead"><div><span className="candidate-eyebrow">PERSONALIZED CAREER GUIDANCE</span><h2>Close the gaps that unlock your best matches.</h2><p>Priorities come from missing requirements across your top three ranked opportunities—not from a generic learning list.</p></div><div className="candidate-readiness"><span>Market readiness</span><strong>{Math.round(rankedJobs.slice(0,3).reduce((sum,item)=>sum+item.match.total,0)/3)}%</strong><small>Top three average</small></div></section><div className="candidate-gap-grid"><section className="candidate-card"><div className="candidate-section-head"><div><p className="candidate-kicker">PRIORITY GAPS</p><h3>Your highest-impact next skills</h3></div><span>{gapSummary.length} detected</span></div>{gapSummary.length?gapSummary.map((gap,index)=><article className="candidate-gap-row" key={gap.skill}><span>{index+1}</span><div><strong>{gap.skill}</strong><p>Missing from {gap.count} of your top 3 matches · most useful for {gap.bestJob}</p><div className="candidate-bar"><i style={{width:`${Math.min(100,45+gap.count*18)}%`}}/></div></div><b>{gap.count===3?"Critical":gap.count===2?"High":"Useful"}</b></article>):<div className="candidate-empty">No core skill gaps across your top opportunities.</div>}</section><section className="candidate-card"><div className="candidate-section-head"><div><p className="candidate-kicker">90-DAY ROADMAP</p><h3>Recommended next actions</h3></div></div>{gapSummary.slice(0,3).map((gap,index)=><article className="candidate-roadmap" key={gap.skill}><span>{index===0?"Days 1–30":index===1?"Days 31–60":"Days 61–90"}</span><h4>{index===0?`Build foundations in ${gap.skill}`:index===1?`Ship a ${gap.skill} proof project`:`Verify ${gap.skill} in an assessment`}</h4><p>{index===0?"Complete one focused course and document the concepts you can apply.":index===1?"Create a tested repository with a clear README and measurable outcome.":"Take a role-specific interview and add the verified result to your profile."}</p><button>{index===2?"Start verification":"View learning plan"}</button></article>)}</section></div></div>}
 
